@@ -1,0 +1,53 @@
+# Values merged over values.yaml by the chart-values CI check (schema
+# validation) and by `make helm-lint` / `make helm-template`. They provide
+# every required value with placeholder names so the chart renders fully,
+# including the Gateway API route and one database.
+oauth:
+  issuerURL: https://mcp-timescale.example.test
+  dex:
+    issuerURL: https://dex.example.test
+    clientIDSecretRef:
+      name: mcp-timescale-dex
+      key: client-id
+    clientSecretSecretRef:
+      name: mcp-timescale-dex
+      key: client-secret
+  trustedAudiences:
+    - muster-client
+
+databases:
+  - name: demo
+    description: CI placeholder database
+    host: timescale-demo-repl.timescale-demo.svc.cluster.local
+    port: 5432
+    dbname: timescaledb
+    sslmode: require
+    secretRef:
+      name: timescaledb-data-reader-user.timescale-demo.credentials.postgresql.acid.zalan.do
+      usernameKey: username
+      passwordKey: password
+    allowedGroups:
+      - giantswarm-admins
+    maxRows: 500
+    statementTimeout: 30s
+    maxConnections: 4
+  - name: verified
+    host: timescale-other.timescale-other.svc.cluster.local
+    dbname: timescaledb
+    sslmode: verify-full
+    secretRef:
+      name: timescaledb-data-reader-user.timescale-other.credentials.postgresql.acid.zalan.do
+    sslRootCertSecretRef:
+      name: timescale-other-ca
+      key: ca.crt
+
+gatewayAPI:
+  enabled: true
+  httpRoute:
+    parentRefs:
+      - name: giantswarm-default
+        namespace: envoy-gateway-system
+    hostnames:
+      - mcp-timescale.example.test
+  backendTrafficPolicy:
+    enabled: true

@@ -19,16 +19,25 @@ import (
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 
-	"github.com/giantswarm/mcp-timescale/internal/timescale"
+	"github.com/giantswarm/mcp-timescale/internal/config"
 	"github.com/giantswarm/mcp-timescale/internal/server"
+	"github.com/giantswarm/mcp-timescale/internal/timescale"
 	"github.com/giantswarm/mcp-timescale/internal/tools"
 )
 
+// Tool handlers get the largest statement timeout plus this slack before the
+// timeout middleware cuts them off; the middleware never fires first.
+const (
+	toolTimeoutSlack = 15 * time.Second
+	minToolTimeout   = 45 * time.Second
+)
+
 var (
-	flagTransport   string
-	flagMCPAddr     string
-	flagMetricsAddr string
-	flagDebug       bool
+	flagTransport     string
+	flagMCPAddr       string
+	flagMetricsAddr   string
+	flagDebug         bool
+	flagDatabasesFile string
 )
 
 var serveCmd = &cobra.Command{
@@ -45,9 +54,11 @@ func init() {
 	serveCmd.Flags().StringVar(&flagMetricsAddr, "metrics-addr", server.EnvOr("METRICS_ADDR", ":9091"),
 		"listen address for /metrics, /healthz, /readyz")
 	serveCmd.Flags().BoolVar(&flagDebug, "debug", false, "enable debug logging (overrides DEBUG env)")
+	serveCmd.Flags().StringVar(&flagDatabasesFile, "databases-file", server.EnvOr(config.EnvDatabasesFile, config.DefaultDatabasesFile),
+		"YAML file listing the databases (env "+config.EnvDatabasesFile+"); "+config.EnvDSN+" adds a database named "+config.DSNDatabaseName)
 }
 
-func runServe(_ *cobra.Command, _ []string) error {
+func runServe(cmd *cobra.Command, _ []string) error {
 	if err := validateTransport(flagTransport); err != nil {
 		return err
 	}
@@ -87,20 +98,38 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}()
 	}
 
-	exClient := timescale.NewFakeClient()
+	// The databases file is required when the operator named it explicitly
+	// (flag or env); the default path may be absent for local DSN runs.
+	fileRequired := cmd.Flags().Changed("databases-file") || os.Getenv(config.EnvDatabasesFile) != ""
+	dbCfgs, src, err := config.Load(flagDatabasesFile, fileRequired, os.Getenv(config.EnvDSN))
+	if err != nil {
+		return fmt.Errorf("databases: %w", err)
+	}
+	registry, err := timescale.NewRegistry(dbCfgs)
+	if err != nil {
+		return fmt.Errorf("databases: %w", err)
+	}
+	defer registry.Close()
+	logDatabases(logger, registry, src)
 
+	localCaller := flagTransport == server.TransportStdio || !cfg.OAuthEnabled
+
+	toolTimeout := max(registry.MaxStatementTimeout()+toolTimeoutSlack, minToolTimeout)
 	mcp := mcpsrv.NewMCPServer(
 		serviceName, version,
 		mcpsrv.WithToolCapabilities(false),
 		mcpsrv.WithRecovery(),
-		mcpsrv.WithToolHandlerMiddleware(timeout.New(30*time.Second)),
+		mcpsrv.WithInstructions(tools.Instructions),
+		mcpsrv.WithStrictInputSchemaDefault(),
+		mcpsrv.WithInputSchemaValidation(),
+		mcpsrv.WithToolHandlerMiddleware(timeout.New(toolTimeout)),
 		mcpsrv.WithToolHandlerMiddleware(responsecap.New(responsecap.Options{})),
 	)
-	tools.Register(mcp, tools.Deps{Client: exClient, Log: logger})
+	tools.Register(mcp, tools.Deps{Registry: registry, Log: logger, LocalCaller: localCaller})
 
 	if flagTransport == server.TransportStdio {
 		logger.Info("MCP serving on stdio", "transport", server.TransportStdio)
-		logger.Warn("stdio transport bypasses OAuth — tool calls hit authz errors unless the session installs a caller identity")
+		logger.Warn("stdio transport bypasses OAuth — every tool call runs as caller " + tools.LocalCallerEmail)
 		return mcpsrv.ServeStdio(mcp)
 	}
 
@@ -112,7 +141,7 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}
 		defer func() { _ = auth.Shutdown(context.Background()) }()
 	} else {
-		logger.Warn("OAuth is DISABLED — set OAUTH_ENABLED=true plus OAUTH_ISSUER, OAUTH_PROVIDER, and the provider-specific OAUTH_* vars for production")
+		logger.Warn("OAuth is DISABLED — every tool call runs as caller " + tools.LocalCallerEmail + "; set OAUTH_ENABLED=true plus OAUTH_ISSUER, OAUTH_PROVIDER, and the provider-specific OAUTH_* vars for production")
 	}
 
 	mcpMux := server.BuildMCPMux(flagTransport, mcp, auth)
@@ -155,6 +184,23 @@ func runServe(_ *cobra.Command, _ []string) error {
 	obsCancel()
 	<-obsDone
 	return nil
+}
+
+// logDatabases records the inventory at startup: names and endpoints, never
+// credentials.
+func logDatabases(logger *slog.Logger, registry *timescale.Registry, src config.Source) {
+	if registry.Len() == 0 {
+		logger.Warn("no databases configured — tools will report that nothing is configured", "databases_file", flagDatabasesFile, "dsn_env", config.EnvDSN)
+		return
+	}
+	for _, db := range registry.All() {
+		c := db.Config()
+		logger.Info("database configured",
+			"name", c.Name, "host", c.Host, "port", c.Port, "dbname", c.DBName, "sslmode", c.SSLMode,
+			"max_rows", c.MaxRows, "statement_timeout", c.StatementTimeout.String(), "max_connections", c.MaxConnections,
+			"allowed_groups", c.AllowedGroups, "allowed_users", c.AllowedUsers)
+	}
+	logger.Info("databases loaded", "count", registry.Len(), "file", src.File, "dsn", src.DSN)
 }
 
 func validateTransport(t string) error {

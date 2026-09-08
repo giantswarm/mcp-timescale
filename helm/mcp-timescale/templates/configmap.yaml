@@ -8,6 +8,7 @@ data:
   MCP_ADDR: ":8080"
   METRICS_ADDR: ":9091"
   LOG_FORMAT: json
+  MCP_TIMESCALE_DATABASES_FILE: /etc/mcp-timescale/config/databases.yaml
   {{- if .Values.oauth.enabled }}
   OAUTH_ENABLED: "true"
   OAUTH_PROVIDER: {{ .Values.oauth.provider | quote }}

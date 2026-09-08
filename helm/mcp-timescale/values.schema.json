@@ -1,83 +1,513 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "additionalProperties": true,
-  "required": ["image", "oauth", "storage"],
-  "properties": {
-    "image": {
-      "type": "object",
-      "required": ["repository"],
-      "properties": {
-        "repository": {"type": "string", "minLength": 1},
-        "tag":        {"type": "string"},
-        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
-      }
-    },
-    "replicas": {"type": "integer", "minimum": 1},
-    "oauth": {
-      "type": "object",
-      "required": ["enabled"],
-      "properties": {
-        "enabled":                    {"type": "boolean"},
-        "provider":                   {"type": "string", "enum": ["dex", "google", "github"]},
-        "issuerURL":                  {"type": "string"},
-        "audience":                   {"type": "string"},
-        "scopes":                     {"type": "array", "items": {"type": "string"}},
-        "allowInsecureHTTP":          {"type": "boolean"},
-        "allowLocalhostRedirectURIs": {"type": "boolean"},
-        "dex": {
-          "type": "object",
-          "properties": {
-            "issuerURL":             {"type": "string"},
-            "clientIDSecretRef":     {"$ref": "#/definitions/secretRef"},
-            "clientSecretSecretRef": {"$ref": "#/definitions/secretRef"}
-          }
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "affinity": {
+            "type": "object",
+            "additionalProperties": true
         },
-        "trustedAudiences":          {"type": "array", "items": {"type": "string"}},
-        "trustedRedirectSchemes":    {"type": "array", "items": {"type": "string"}},
-        "encryptionKeySecretRef":    {"$ref": "#/definitions/secretRef"},
-        "sessionIDHMACKeySecretRef": {"$ref": "#/definitions/secretRef"}
-      },
-      "allOf": [
-        {
-          "if":   {"properties": {"enabled": {"const": true}}},
-          "then": {"required": ["provider", "issuerURL", "audience"]}
+        "autoscaling": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "maxReplicas": {
+                    "type": "integer"
+                },
+                "minReplicas": {
+                    "type": "integer"
+                },
+                "targetCPUUtilizationPercentage": {
+                    "type": "integer"
+                }
+            }
         },
-        {
-          "if":   {"properties": {"enabled": {"const": true}, "provider": {"const": "dex"}}},
-          "then": {"required": ["dex"]}
+        "baseDomain": {
+            "type": "string"
+        },
+        "bootstrapMode": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "chartOperator": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "ciliumNetworkPolicy": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "cluster": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "clusterCA": {
+            "type": "string"
+        },
+        "clusterCIDR": {
+            "type": "string"
+        },
+        "clusterDNSIP": {
+            "type": "string"
+        },
+        "clusterID": {
+            "type": "string"
+        },
+        "databases": {
+            "type": "array",
+            "description": "Databases the server may connect to. Each entry becomes one database in databases.yaml; credentials come from a Secret mounted read-only (for a Zalando postgres-operator cluster that is the <role>.<cluster>.credentials.postgresql.acid.zalan.do Secret of a reader role). Optional keys: description, port (5432), sslmode (require), sslRootCertSecretRef {name, key} for verify-ca/verify-full, allowedGroups, allowedUsers (empty = every authenticated caller), maxRows (500, max 5000), statementTimeout (30s), maxConnections (4)."
+        },
+        "extraEnv": {
+            "type": "array",
+            "description": "Any additional non-secret env vars."
+        },
+        "extraEnvFromSecretRefs": {
+            "type": "array",
+            "description": "Any Secret refs to mount as env vars ({envName, name, key})."
+        },
+        "fullnameOverride": {
+            "type": "string"
+        },
+        "gatewayAPI": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "backendTrafficPolicy": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "annotations": {
+                            "type": "object",
+                            "additionalProperties": true
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "labels": {
+                            "type": "object",
+                            "additionalProperties": true
+                        },
+                        "timeout": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "httpRoute": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "annotations": {
+                            "type": "object",
+                            "additionalProperties": true
+                        },
+                        "hostnames": {
+                            "type": "array"
+                        },
+                        "labels": {
+                            "type": "object",
+                            "additionalProperties": true
+                        },
+                        "parentRefs": {
+                            "type": "array"
+                        }
+                    }
+                }
+            }
+        },
+        "gcpProject": {
+            "type": "string"
+        },
+        "global": {
+            "type": [
+                "object",
+                "null"
+            ],
+            "description": "Global values shared between all subcharts",
+            "$comment": "Added automatically by 'helm schema' to allow this chart to be used as a Helm dependency, as this schema would otherwise not allow Helm's special 'global' values key."
+        },
+        "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "pullPolicy": {
+                    "type": "string",
+                    "description": "Image pull policy."
+                },
+                "repository": {
+                    "type": "string",
+                    "description": "Image repository."
+                },
+                "tag": {
+                    "type": "string",
+                    "description": "Image tag; defaults to .Chart.AppVersion."
+                }
+            }
+        },
+        "ingress": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "className": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "tls": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "secretName": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "nameOverride": {
+            "type": "string"
+        },
+        "networkPolicy": {
+            "type": "object",
+            "description": "NetworkPolicy with default-deny egress (DNS + egressAllowlist only). Off by default because the databases and Dex are reached by DNS name and a NetworkPolicy cannot express that; when enabling it, allow TCP 5432 to the database namespaces and TCP 443 for Dex JWKS. Example: egressAllowlist: - to: - namespaceSelector: matchLabels: {kubernetes.io/metadata.name: timescale-demo} ports: - protocol: TCP port: 5432 - to: - ipBlock: {cidr: 0.0.0.0/0} ports: - protocol: TCP port: 443",
+            "additionalProperties": false,
+            "properties": {
+                "egressAllowlist": {
+                    "type": "array"
+                },
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "nodeSelector": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "oauth": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "allowInsecureHTTP": {
+                    "type": "boolean"
+                },
+                "allowLocalhostRedirectURIs": {
+                    "type": "boolean"
+                },
+                "audience": {
+                    "type": "string"
+                },
+                "dex": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "clientIDSecretRef": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "key": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "clientSecretSecretRef": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "key": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "issuerURL": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "encryptionKeySecretRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "key": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "issuerURL": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sessionIDHMACKeySecretRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "key": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "trustedAudiences": {
+                    "type": "array",
+                    "description": "Trusted audiences for SSO token forwarding (RFC 8693): the Dex client IDs whose ID tokens muster forwards (auth.mode forward). Each entry must match [a-zA-Z0-9_-]{1,256}."
+                },
+                "trustedRedirectSchemes": {
+                    "type": "array"
+                }
+            }
+        },
+        "otel": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "endpoint": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "type": "string"
+                }
+            }
+        },
+        "podDisruptionBudget": {
+            "type": "object",
+            "description": "PodDisruptionBudget. Off by default because replicas is 1 (minAvailable 1 would block node drains); enable together with replicas >= 2.",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "minAvailable": {
+                    "type": "integer"
+                }
+            }
+        },
+        "podSecurityContext": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "fsGroup": {
+                    "type": "integer"
+                },
+                "runAsGroup": {
+                    "type": "integer"
+                },
+                "runAsNonRoot": {
+                    "type": "boolean"
+                },
+                "runAsUser": {
+                    "type": "integer"
+                },
+                "seccompProfile": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "provider": {
+            "type": "string"
+        },
+        "replicas": {
+            "type": "integer",
+            "description": "Replica count. One is enough with forwarded tokens (no OAuth state is shared); for more than one replica with interactive logins set storage.kind to valkey."
+        },
+        "resources": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "limits": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "cpu": {
+                            "type": "string"
+                        },
+                        "memory": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "requests": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "cpu": {
+                            "type": "string"
+                        },
+                        "memory": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "securityContext": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "allowPrivilegeEscalation": {
+                    "type": "boolean"
+                },
+                "capabilities": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "drop": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "readOnlyRootFilesystem": {
+                    "type": "boolean"
+                },
+                "runAsGroup": {
+                    "type": "integer"
+                },
+                "runAsNonRoot": {
+                    "type": "boolean"
+                },
+                "runAsUser": {
+                    "type": "integer"
+                }
+            }
+        },
+        "service": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string"
+                },
+                "metricsPort": {
+                    "type": "integer"
+                },
+                "port": {
+                    "type": "integer"
+                }
+            }
+        },
+        "serviceAccount": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "annotations": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "automountServiceAccountToken": {
+                    "type": "boolean",
+                    "description": "The server never talks to the Kubernetes API; no token is mounted."
+                },
+                "create": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "serviceMonitor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "interval": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "scrapeTimeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "storage": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "description": "OAuth state store. memory: per-pod, lost on restart, not shared across replicas — sufficient when clients arrive with forwarded tokens (muster). valkey: required for replicas > 1 with interactive logins."
+                },
+                "valkey": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "address": {
+                            "type": "string"
+                        },
+                        "passwordSecretRef": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "key": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "tls": {
+                            "type": "boolean"
+                        }
+                    }
+                }
+            }
+        },
+        "subscriptionID": {
+            "type": "string"
+        },
+        "tolerations": {
+            "type": "array"
+        },
+        "topologySpreadConstraints": {
+            "type": "array"
         }
-      ]
-    },
-    "storage": {
-      "type": "object",
-      "required": ["kind"],
-      "properties": {
-        "kind": {"type": "string", "enum": ["memory", "valkey"]},
-        "valkey": {
-          "type": "object",
-          "properties": {
-            "address":           {"type": "string"},
-            "passwordSecretRef": {"$ref": "#/definitions/secretRef"},
-            "tls":               {"type": "boolean"}
-          }
-        }
-      },
-      "allOf": [
-        {
-          "if":   {"properties": {"kind": {"const": "valkey"}}},
-          "then": {"properties": {"valkey": {"required": ["address"]}}}
-        }
-      ]
     }
-  },
-  "definitions": {
-    "secretRef": {
-      "type": "object",
-      "properties": {
-        "name": {"type": "string"},
-        "key":  {"type": "string"}
-      }
-    }
-  }
 }

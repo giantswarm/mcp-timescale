@@ -6,6 +6,13 @@ MCP endpoint:
 Metrics:
   http://{{ include "mcp-timescale.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.metricsPort }}/metrics
 
+Databases ({{ len .Values.databases }}):
+{{- range .Values.databases }}
+  {{ .name }}: {{ .host }}:{{ default 5432 .port }}/{{ .dbname }} (credentials from Secret {{ .secretRef.name }})
+{{- else }}
+  none configured — set .Values.databases; tools will report an empty inventory until then.
+{{- end }}
+
 {{- if .Values.oauth.enabled }}
 OAuth flow:
   Issuer:   {{ .Values.oauth.issuerURL }}

@@ -16,8 +16,11 @@ spec:
         # Trigger a rollout when ConfigMap changes — Helm does not do this
         # automatically.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/databases: {{ include (print $.Template.BasePath "/configmap-databases.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "mcp-timescale.serviceAccountName" . }}
+      # The server never talks to the Kubernetes API.
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
@@ -112,6 +115,36 @@ spec:
             # readOnlyRootFilesystem is on; tmp + cache need writable mounts.
             - name: tmp
               mountPath: /tmp
+            - name: databases
+              mountPath: /etc/mcp-timescale/config
+              readOnly: true
+            {{- range .Values.databases }}
+            - name: {{ printf "db-%s" .name | trunc 63 | trimSuffix "-" }}
+              mountPath: /etc/mcp-timescale/secrets/{{ .name }}
+              readOnly: true
+            {{- if dig "sslRootCertSecretRef" "name" "" . }}
+            - name: {{ printf "ca-%s" .name | trunc 63 | trimSuffix "-" }}
+              mountPath: /etc/mcp-timescale/ca/{{ .name }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: databases
+          configMap:
+            name: {{ include "mcp-timescale.fullname" . }}-databases
+        {{- range .Values.databases }}
+        # Read-only database credentials; 0440 with fsGroup keeps them
+        # readable by the nonroot user only.
+        - name: {{ printf "db-%s" .name | trunc 63 | trimSuffix "-" }}
+          secret:
+            secretName: {{ .secretRef.name | quote }}
+            defaultMode: 0440
+        {{- if dig "sslRootCertSecretRef" "name" "" . }}
+        - name: {{ printf "ca-%s" .name | trunc 63 | trimSuffix "-" }}
+          secret:
+            secretName: {{ .sslRootCertSecretRef.name | quote }}
+            defaultMode: 0440
+        {{- end }}
+        {{- end }}

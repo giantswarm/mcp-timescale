@@ -23,7 +23,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   serviceName,
-	Short: "MCP server (template — replace this description)",
+	Short: "Read-only MCP server for TimescaleDB and PostgreSQL databases, acting on the caller identity",
 }
 
 // Execute runs the root command and exits non-zero on error.

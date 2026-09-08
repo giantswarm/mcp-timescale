@@ -126,3 +126,13 @@ func CallerFromContext(ctx context.Context) (Caller, bool) {
 
 // callerKey is unexported so external packages cannot overwrite the value.
 type callerKey struct{}
+
+// ContextWithCaller attaches a caller to ctx the same way PromoteOAuthCaller
+// does, for tests and for code paths that run without the OAuth HTTP layer.
+func ContextWithCaller(ctx context.Context, c Caller) context.Context {
+	ui := c.Raw
+	if ui == nil {
+		ui = &providers.UserInfo{ID: c.Subject, Email: c.Email, Groups: c.Groups}
+	}
+	return context.WithValue(ctx, callerKey{}, ui)
+}
