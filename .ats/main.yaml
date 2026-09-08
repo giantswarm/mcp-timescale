@@ -1,5 +1,9 @@
 # app-test-suite configuration (generated CI runs `ats` against the built chart in kind).
-# Smoke tests live in tests/ats. Upgrade tests need a previously released chart version in
-# the catalog, which a brand-new chart does not have yet.
-skip-steps:
-  - upgrade
+# Smoke tests live in tests/ats and install the chart with tests/test-values.yaml.
+# Upgrade tests need a previously released chart version in the catalog.
+app-tests-app-config-file: tests/test-values.yaml
+app-tests-deploy-namespace: mcp-timescale
+
+upgrade-tests-app-catalog-url: https://giantswarm.github.io/giantswarm-catalog
+
+skip-steps: [functional, upgrade]
