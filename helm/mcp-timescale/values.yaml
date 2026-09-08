@@ -1,13 +1,21 @@
 # Default values for mcp-timescale.
-# This chart ships secure-by-default: hardened SecurityContext, NetworkPolicy
-# default-deny, ServiceMonitor on, OAuth required. Override per-environment.
+# This chart ships secure-by-default: hardened SecurityContext, no
+# ServiceAccount token, ServiceMonitor on, OAuth required. The server acts
+# on the caller's identity (forwarded OIDC tokens), holds only read-only
+# database credentials and never mutates anything.
 
 image:
+  # -- Image repository.
   repository: gsoci.azurecr.io/giantswarm/mcp-timescale
-  tag: ""  # defaults to .Chart.AppVersion
+  # -- Image tag; defaults to .Chart.AppVersion.
+  tag: ""
+  # -- Image pull policy.
   pullPolicy: IfNotPresent
 
-replicas: 2
+# -- Replica count. One is enough with forwarded tokens (no OAuth state is
+# shared); for more than one replica with interactive logins set
+# storage.kind to valkey.
+replicas: 1
 
 resources:
   requests:
@@ -29,6 +37,32 @@ ingress:
   tls:
     enabled: false
     secretName: ""
+
+# -- Databases the server may connect to. Each entry becomes one database in
+# databases.yaml; credentials come from a Secret mounted read-only (for a
+# Zalando postgres-operator cluster that is the
+# <role>.<cluster>.credentials.postgresql.acid.zalan.do Secret of a reader
+# role). Optional keys: description, port (5432), sslmode (require),
+# sslRootCertSecretRef {name, key} for verify-ca/verify-full, allowedGroups,
+# allowedUsers (empty = every authenticated caller), maxRows (500, max 5000),
+# statementTimeout (30s), maxConnections (4).
+databases: []
+# databases:
+#   - name: demo
+#     description: Factory demo data
+#     host: timescale-demo-repl.timescale-demo.svc.cluster.local
+#     port: 5432
+#     dbname: timescaledb
+#     sslmode: require
+#     secretRef:
+#       name: timescaledb-data-reader-user.timescale-demo.credentials.postgresql.acid.zalan.do
+#       usernameKey: username
+#       passwordKey: password
+#     allowedGroups: []
+#     allowedUsers: []
+#     maxRows: 500
+#     statementTimeout: 30s
+#     maxConnections: 4
 
 # OAuth gates the /mcp endpoint. Disable only for stdio-only deployments.
 # Every knob below maps to an OAUTH_* env var consumed by mcp-oauth's
@@ -57,8 +91,7 @@ oauth:
   # IDE clients that loop back to a localhost callback.
   allowLocalhostRedirectURIs: false
   # Dex provider config. The redirect URL is auto-derived from issuerURL
-  # ("${issuerURL}/oauth/callback") since v0.2.115 — no need to template
-  # it here.
+  # ("${issuerURL}/oauth/callback").
   dex:
     issuerURL: ""
     clientIDSecretRef:
@@ -67,9 +100,9 @@ oauth:
     clientSecretSecretRef:
       name: ""
       key: client-secret
-  # Trusted audiences for SSO token forwarding (RFC 8693). Each entry must
-  # match [a-zA-Z0-9_-]{1,256}; URL-shaped audiences are rejected at
-  # startup since v0.2.113.
+  # -- Trusted audiences for SSO token forwarding (RFC 8693): the Dex client
+  # IDs whose ID tokens muster forwards (auth.mode forward). Each entry must
+  # match [a-zA-Z0-9_-]{1,256}.
   trustedAudiences: []
   # URI schemes accepted during public client registration without a
   # registration access token (e.g., cursor, vscode).
@@ -86,9 +119,10 @@ oauth:
     key: session-id-hmac-key
 
 storage:
-  # memory: per-pod, lost on restart, NOT shared across replicas.
-  # valkey: required for replicas > 1.
-  kind: valkey
+  # -- OAuth state store. memory: per-pod, lost on restart, not shared across
+  # replicas — sufficient when clients arrive with forwarded tokens (muster).
+  # valkey: required for replicas > 1 with interactive logins.
+  kind: memory
   valkey:
     address: ""
     passwordSecretRef:
@@ -96,28 +130,56 @@ storage:
       key: password
     tls: true
 
+# Gateway API HTTPRoute for the public hostname (Envoy Gateway). The route
+# forwards / so /mcp, /oauth/* and /.well-known/* share the Service.
+gatewayAPI:
+  enabled: false
+  httpRoute:
+    # Required when enabled, e.g.
+    #   - name: giantswarm-default
+    #     namespace: envoy-gateway-system
+    parentRefs: []
+    hostnames: []
+    labels: {}  # @schema additionalProperties: true
+    annotations: {}  # @schema additionalProperties: true
+  backendTrafficPolicy:
+    # Envoy Gateway BackendTrafficPolicy; 0s disables the request timeout
+    # that would otherwise cut long-lived MCP streams.
+    enabled: false
+    timeout: "0s"
+    labels: {}  # @schema additionalProperties: true
+    annotations: {}  # @schema additionalProperties: true
+
 serviceMonitor:
   enabled: true
   interval: 30s
   scrapeTimeout: 10s
-  labels: {}
+  labels: {}  # @schema additionalProperties: true
 
-# Default-deny egress. Add upstream hosts (Dex, Valkey, OTEL collector,
-# your domain backend) to egressAllowlist.
+# -- NetworkPolicy with default-deny egress (DNS + egressAllowlist only).
+# Off by default because the databases and Dex are reached by DNS name and a
+# NetworkPolicy cannot express that; when enabling it, allow TCP 5432 to the
+# database namespaces and TCP 443 for Dex JWKS. Example:
+#   egressAllowlist:
+#     - to:
+#         - namespaceSelector:
+#             matchLabels: {kubernetes.io/metadata.name: timescale-demo}
+#       ports:
+#         - protocol: TCP
+#           port: 5432
+#     - to:
+#         - ipBlock: {cidr: 0.0.0.0/0}
+#       ports:
+#         - protocol: TCP
+#           port: 443
 networkPolicy:
-  enabled: true
+  enabled: false
   egressAllowlist: []
-  # Example:
-  # egressAllowlist:
-  #   - to:
-  #       - namespaceSelector:
-  #           matchLabels: {kubernetes.io/metadata.name: dex-system}
-  #     ports:
-  #       - protocol: TCP
-  #         port: 5556
 
+# -- PodDisruptionBudget. Off by default because replicas is 1 (minAvailable
+# 1 would block node drains); enable together with replicas >= 2.
 podDisruptionBudget:
-  enabled: true
+  enabled: false
   minAvailable: 1
 
 autoscaling:
@@ -131,9 +193,9 @@ otel:
   endpoint: ""
   protocol: http/protobuf  # or grpc
 
-# Any additional non-secret env vars.
+# -- Any additional non-secret env vars.
 extraEnv: []
-# Any Secret refs to mount as env vars.
+# -- Any Secret refs to mount as env vars ({envName, name, key}).
 extraEnvFromSecretRefs: []
 
 # Pod-level security context. Hardened by default.
@@ -159,11 +221,13 @@ securityContext:
 serviceAccount:
   create: true
   name: ""
-  annotations: {}
+  annotations: {}  # @schema additionalProperties: true
+  # -- The server never talks to the Kubernetes API; no token is mounted.
+  automountServiceAccountToken: false
 
-nodeSelector: {}
+nodeSelector: {}  # @schema additionalProperties: true
 tolerations: []
-affinity: {}
+affinity: {}  # @schema additionalProperties: true
 topologySpreadConstraints: []
 
 nameOverride: ""

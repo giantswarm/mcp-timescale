@@ -6,6 +6,14 @@ version: 0.0.0
 appVersion: "0.0.0"
 kubeVersion: ">=1.27.0-0"
 home: https://github.com/giantswarm/mcp-timescale
+icon: https://s.giantswarm.io/app-icons/giantswarm/1/dark.svg
+sources:
+  - https://github.com/giantswarm/mcp-timescale
+keywords:
+  - mcp
+  - timescaledb
+  - postgresql
+  - model-context-protocol
 maintainers:
   - name: Giant Swarm
     url: https://giantswarm.io

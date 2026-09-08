@@ -1,10 +1,21 @@
 # Override values applied by the ABS (App Build Suite) packaging step
-# when running ATS chart tests. Keep minimal — anything required for the
-# chart to render in a vanilla CI cluster goes here, everything else
-# stays in helm/mcp-timescale/values.yaml.
+# when running ATS chart tests in a vanilla kind cluster. Keep minimal —
+# anything required for the chart to render and roll out without Dex,
+# Prometheus Operator or Gateway API goes here, everything else stays in
+# helm/mcp-timescale/values.yaml.
 
-# image:
-#   tag: ""
+# No Dex in the test cluster: the server starts without OAuth and runs every
+# tool call as caller "local".
+oauth:
+  enabled: false
+
+# No Prometheus Operator CRDs in kind.
+serviceMonitor:
+  enabled: false
+
+# No databases: the server starts, logs a warning and reports an empty
+# inventory; the smoke test only checks the rollout.
+databases: []
 
 ciliumNetworkPolicy:
   enabled: false

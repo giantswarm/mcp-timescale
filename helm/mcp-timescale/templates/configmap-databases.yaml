@@ -1,0 +1,37 @@
+{{- /*
+databases.yaml as the server reads it (internal/config). Credentials are
+never in this ConfigMap: every entry points at files from the Secret the
+deployment mounts under /etc/mcp-timescale/secrets/<name>/.
+*/ -}}
+{{- $dbs := list -}}
+{{- range .Values.databases }}
+{{- $name := required "databases[].name is required" .name -}}
+{{- $secret := required (printf "databases[%s].secretRef.name is required" $name) (dig "secretRef" "name" "" .) -}}
+{{- $entry := dict
+  "name" $name
+  "host" (required (printf "databases[%s].host is required" $name) .host)
+  "dbname" (required (printf "databases[%s].dbname is required" $name) .dbname)
+  "port" (default 5432 .port)
+  "sslmode" (default "require" .sslmode)
+  "usernameFile" (printf "/etc/mcp-timescale/secrets/%s/%s" $name (default "username" .secretRef.usernameKey))
+  "passwordFile" (printf "/etc/mcp-timescale/secrets/%s/%s" $name (default "password" .secretRef.passwordKey))
+-}}
+{{- with .description }}{{ $_ := set $entry "description" . }}{{ end -}}
+{{- with .allowedGroups }}{{ $_ := set $entry "allowedGroups" . }}{{ end -}}
+{{- with .allowedUsers }}{{ $_ := set $entry "allowedUsers" . }}{{ end -}}
+{{- with .maxRows }}{{ $_ := set $entry "maxRows" . }}{{ end -}}
+{{- with .statementTimeout }}{{ $_ := set $entry "statementTimeout" . }}{{ end -}}
+{{- with .maxConnections }}{{ $_ := set $entry "maxConnections" . }}{{ end -}}
+{{- if dig "sslRootCertSecretRef" "name" "" . }}
+{{- $_ := set $entry "sslRootCertFile" (printf "/etc/mcp-timescale/ca/%s/%s" $name (default "ca.crt" .sslRootCertSecretRef.key)) }}
+{{- end -}}
+{{- $dbs = append $dbs $entry -}}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-timescale.fullname" . }}-databases
+  labels: {{- include "mcp-timescale.labels" . | nindent 4 }}
+data:
+  databases.yaml: |
+    {{- toYaml (dict "databases" $dbs) | nindent 4 }}
