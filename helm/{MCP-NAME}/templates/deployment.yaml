@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-template.fullname" . }}
+  labels: {{- include "mcp-template.labels" . | nindent 4 }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicas }}
+{{- end }}
+  selector:
+    matchLabels: {{- include "mcp-template.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "mcp-template.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Trigger a rollout when ConfigMap changes — Helm does not do this
+        # automatically.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "mcp-template.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "mcp-template.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "mcp-template.fullname" . }}
+          env:
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+            {{- if .Values.oauth.enabled }}
+            {{- with .Values.oauth.dex.clientIDSecretRef }}
+            - name: OAUTH_DEX_CLIENT_ID
+              valueFrom:
+                secretKeyRef: {name: {{ .name | quote }}, key: {{ .key | quote }}}
+            {{- end }}
+            {{- with .Values.oauth.dex.clientSecretSecretRef }}
+            - name: OAUTH_DEX_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ .name | quote }}, key: {{ .key | quote }}}
+            {{- end }}
+            {{- with .Values.oauth.encryptionKeySecretRef }}
+            {{- if .name }}
+            - name: OAUTH_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ .name | quote }}, key: {{ .key | quote }}}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.oauth.sessionIDHMACKeySecretRef }}
+            {{- if .name }}
+            - name: OAUTH_SESSION_ID_HMAC_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ .name | quote }}, key: {{ .key | quote }}}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.storage.kind "valkey" }}
+            {{- with .Values.storage.valkey.passwordSecretRef }}
+            {{- if .name }}
+            - name: OAUTH_VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ .name | quote }}, key: {{ .key | quote }}}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.extraEnvFromSecretRefs }}
+          {{- range . }}
+            - name: {{ .envName | quote }}
+              valueFrom:
+                secretKeyRef: {name: {{ .name | quote }}, key: {{ .key | quote }}}
+          {{- end }}
+          {{- end }}
+          ports:
+            - name: mcp
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9091
+              protocol: TCP
+          livenessProbe:
+            httpGet: {path: /healthz, port: metrics}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /readyz, port: metrics}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # readOnlyRootFilesystem is on; tmp + cache need writable mounts.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

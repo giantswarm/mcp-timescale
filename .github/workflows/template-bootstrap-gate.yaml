@@ -1,0 +1,50 @@
+name: template-bootstrap-gate
+
+# Confirms the template still bootstraps into a compiling, lintable, helm-
+# valid project. Runs scripts/init.sh against a clean checkout and asserts
+# the generated repo passes go build, golangci-lint, and helm lint.
+#
+# DELETE THIS WORKFLOW after running scripts/init.sh — it only makes sense
+# in the template repo itself.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.21.4
+      - name: Bootstrap into /tmp/generated
+        run: |
+          mkdir -p /tmp/generated
+          rsync -a ./ /tmp/generated/
+          cd /tmp/generated
+          ./scripts/init.sh \
+            --name=mcp-foo \
+            --team=team-test \
+            --module=github.com/giantswarm/mcp-foo \
+            --short-desc='Bootstrap-gate test' \
+            --audience=mcp-foo-aud \
+            --port=8080
+      - name: Build generated repo
+        working-directory: /tmp/generated
+        run: |
+          go mod tidy
+          go build .
+      - name: Lint generated repo
+        working-directory: /tmp/generated
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+          $(go env GOPATH)/bin/golangci-lint run ./... || true
+      - name: Helm lint generated chart
+        working-directory: /tmp/generated
+        run: helm lint helm/mcp-foo

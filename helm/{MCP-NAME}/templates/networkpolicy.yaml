@@ -1,0 +1,33 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mcp-template.fullname" . }}
+  labels: {{- include "mcp-template.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "mcp-template.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9091
+  egress:
+    # DNS — required for any outbound resolution.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- with .Values.networkPolicy.egressAllowlist }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,50 @@
+"""Smoke test for the {MCP-NAME} chart deployed via ATS.
+
+Asserts the cluster is reachable and the deployment reaches readyReplicas
+== replicas. Add functional tests (e.g. a /healthz probe through the
+Service) as the server grows.
+"""
+
+import logging
+from typing import List
+
+import pykube
+import pytest
+from pytest_helm_charts.clusters import Cluster
+from pytest_helm_charts.k8s.deployment import wait_for_deployments_to_run
+
+logger = logging.getLogger(__name__)
+
+deployment_name = "mcp-template"
+namespace_name = "mcp-template"
+
+timeout: int = 560
+
+
+@pytest.mark.smoke
+def test_api_working(kube_cluster: Cluster) -> None:
+    assert kube_cluster.kube_client is not None
+    assert len(pykube.Node.objects(kube_cluster.kube_client)) >= 1
+
+
+@pytest.fixture(scope="module")
+def deployment(request, kube_cluster: Cluster) -> List[pykube.Deployment]:
+    logger.info("Waiting for %s deployment..", deployment_name)
+    deployments = wait_for_deployments_to_run(
+        kube_cluster.kube_client,
+        [deployment_name],
+        namespace_name,
+        timeout,
+    )
+    logger.info("%s deployment looks satisfied..", deployment_name)
+    return deployments
+
+
+@pytest.mark.smoke
+@pytest.mark.upgrade
+@pytest.mark.flaky(reruns=5, reruns_delay=10)
+def test_pods_available(kube_cluster: Cluster, deployment: List[pykube.Deployment]):
+    for s in deployment:
+        assert int(s.obj["status"]["readyReplicas"]) == int(
+            s.obj["spec"]["replicas"]
+        )

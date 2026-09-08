@@ -1,0 +1,10 @@
+# Override values applied by the ABS (App Build Suite) packaging step
+# when running ATS chart tests. Keep minimal — anything required for the
+# chart to render in a vanilla CI cluster goes here, everything else
+# stays in helm/{MCP-NAME}/values.yaml.
+
+# image:
+#   tag: ""
+
+ciliumNetworkPolicy:
+  enabled: false

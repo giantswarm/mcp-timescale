@@ -1,0 +1,16 @@
+{{ .Chart.Name }} {{ .Chart.AppVersion }} installed.
+
+MCP endpoint:
+  http://{{ include "mcp-template.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}/mcp
+
+Metrics:
+  http://{{ include "mcp-template.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.metricsPort }}/metrics
+
+{{- if .Values.oauth.enabled }}
+OAuth flow:
+  Issuer:   {{ .Values.oauth.issuerURL }}
+  Audience: {{ .Values.oauth.audience }}
+  Dex:      {{ .Values.oauth.dex.issuerURL }}
+{{- else }}
+WARNING: OAuth is DISABLED. /mcp accepts unauthenticated requests.
+{{- end }}

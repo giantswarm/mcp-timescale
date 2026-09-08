@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["image", "oauth", "storage"],
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag":        {"type": "string"},
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "replicas": {"type": "integer", "minimum": 1},
+    "oauth": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled":                    {"type": "boolean"},
+        "provider":                   {"type": "string", "enum": ["dex", "google", "github"]},
+        "issuerURL":                  {"type": "string"},
+        "audience":                   {"type": "string"},
+        "scopes":                     {"type": "array", "items": {"type": "string"}},
+        "allowInsecureHTTP":          {"type": "boolean"},
+        "allowLocalhostRedirectURIs": {"type": "boolean"},
+        "dex": {
+          "type": "object",
+          "properties": {
+            "issuerURL":             {"type": "string"},
+            "clientIDSecretRef":     {"$ref": "#/definitions/secretRef"},
+            "clientSecretSecretRef": {"$ref": "#/definitions/secretRef"}
+          }
+        },
+        "trustedAudiences":          {"type": "array", "items": {"type": "string"}},
+        "trustedRedirectSchemes":    {"type": "array", "items": {"type": "string"}},
+        "encryptionKeySecretRef":    {"$ref": "#/definitions/secretRef"},
+        "sessionIDHMACKeySecretRef": {"$ref": "#/definitions/secretRef"}
+      },
+      "allOf": [
+        {
+          "if":   {"properties": {"enabled": {"const": true}}},
+          "then": {"required": ["provider", "issuerURL", "audience"]}
+        },
+        {
+          "if":   {"properties": {"enabled": {"const": true}, "provider": {"const": "dex"}}},
+          "then": {"required": ["dex"]}
+        }
+      ]
+    },
+    "storage": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["memory", "valkey"]},
+        "valkey": {
+          "type": "object",
+          "properties": {
+            "address":           {"type": "string"},
+            "passwordSecretRef": {"$ref": "#/definitions/secretRef"},
+            "tls":               {"type": "boolean"}
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if":   {"properties": {"kind": {"const": "valkey"}}},
+          "then": {"properties": {"valkey": {"required": ["address"]}}}
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "secretRef": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "key":  {"type": "string"}
+      }
+    }
+  }
+}
