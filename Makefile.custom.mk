@@ -33,9 +33,9 @@ govulncheck: ## Scan the module graph for known vulnerabilities
 ##@ Helm
 
 .PHONY: helm-lint
-helm-lint: ## helm lint the chart, with and without the CI values
+helm-lint: ## helm lint the chart with its defaults and with every ci/*-values.yaml case
 	helm lint $(CHART_DIR)
-	helm lint $(CHART_DIR) -f $(CHART_DIR)/ci/ci-values.yaml
+	@set -e; for f in $(CHART_DIR)/ci/*-values.yaml; do echo "====> helm lint $(CHART_DIR) -f $$f"; helm lint $(CHART_DIR) -f $$f; done
 
 .PHONY: helm-template
 helm-template: ## Render chart with the CI values
@@ -44,6 +44,10 @@ helm-template: ## Render chart with the CI values
 .PHONY: helm-test
 helm-test: ## Run the chart unit tests in helm/$(NAME)/tests (requires the helm unittest plugin)
 	helm unittest $(CHART_DIR)
+
+.PHONY: helm-verify-labels
+helm-verify-labels: ## Package the chart with branch-build versions whose 63-character cut lands on a dot and assert every helm.sh/chart and app.kubernetes.io/name label and metadata.name stays valid (#7)
+	CHART_DIR=$(CHART_DIR) ./scripts/verify-chart-labels.sh
 
 ##@ Tidy
 

@@ -119,11 +119,11 @@ spec:
               mountPath: /etc/mcp-timescale/config
               readOnly: true
             {{- range .Values.databases }}
-            - name: {{ printf "db-%s" .name | trunc 63 | trimSuffix "-" }}
+            - name: {{ include "mcp-timescale.trunc63" (printf "db-%s" .name) }}
               mountPath: /etc/mcp-timescale/secrets/{{ .name }}
               readOnly: true
             {{- if dig "sslRootCertSecretRef" "name" "" . }}
-            - name: {{ printf "ca-%s" .name | trunc 63 | trimSuffix "-" }}
+            - name: {{ include "mcp-timescale.trunc63" (printf "ca-%s" .name) }}
               mountPath: /etc/mcp-timescale/ca/{{ .name }}
               readOnly: true
             {{- end }}
@@ -137,12 +137,12 @@ spec:
         {{- range .Values.databases }}
         # Read-only database credentials; 0440 with fsGroup keeps them
         # readable by the nonroot user only.
-        - name: {{ printf "db-%s" .name | trunc 63 | trimSuffix "-" }}
+        - name: {{ include "mcp-timescale.trunc63" (printf "db-%s" .name) }}
           secret:
             secretName: {{ .secretRef.name | quote }}
             defaultMode: 0440
         {{- if dig "sslRootCertSecretRef" "name" "" . }}
-        - name: {{ printf "ca-%s" .name | trunc 63 | trimSuffix "-" }}
+        - name: {{ include "mcp-timescale.trunc63" (printf "ca-%s" .name) }}
           secret:
             secretName: {{ .sslRootCertSecretRef.name | quote }}
             defaultMode: 0440
