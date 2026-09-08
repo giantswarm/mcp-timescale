@@ -81,9 +81,9 @@ configured name); it is optional when exactly one database is configured.
 | `timescale_list_databases` | — | The databases the caller may use: name, description, host, port, dbname, sslmode, `reachable` (3 s probe), PostgreSQL and TimescaleDB versions, `hidden_count` for databases the allowlist excludes. |
 | `timescale_get_database_info` | `database` | Server version, TimescaleDB version and license, current role, `transaction_read_only`, database size, timezone, server time, installed extensions, number of hypertables / continuous aggregates / jobs. |
 | `timescale_list_schemas` | `database` | Non-system schemas with owner, relation count and comment (TimescaleDB-internal schemas hidden). |
-| `timescale_list_tables` | `database`, `schema?`, `include_views?` (true) | Tables and views with kind, owner, row estimate, total size (`hypertable_size` for hypertables), `is_hypertable`, `is_continuous_aggregate`, comment. |
+| `timescale_list_tables` | `database`, `schema?`, `include_views?` (true), `limit?` (200), `offset?` (0), `include_sizes?` (auto) | One page of tables and views, ordered by schema and name, with kind, owner, row estimate, `is_hypertable`, `is_continuous_aggregate`, comment; `total_count` and `truncated` describe the page. `total_bytes` / `total_size` (`hypertable_size` semantics for hypertables, chunks included, computed in one pass for the page) when the page holds fewer than 50 relations or `include_sizes` is true; otherwise `sizes_included: false` and a `note`. |
 | `timescale_describe_table` | `database`, `schema`, `table` | Columns (type, nullable, default, comment), primary key, indexes, foreign keys, view definition; for hypertables the dimensions (time column, chunk interval), chunk count, compression settings, detailed size and policies; for continuous aggregates the definition, source hypertable and refresh policy. |
-| `timescale_list_hypertables` | `database` | Hypertables with owner, dimensions, chunk count, compression flag, time column and chunk interval, total size; materialization hypertables of continuous aggregates are marked. |
+| `timescale_list_hypertables` | `database`, `schema?`, `limit?` (200), `offset?` (0), `include_sizes?` (auto) | One page of hypertables, ordered by schema and name, with owner, dimensions, chunk count, compression flag, time column and chunk interval; materialization hypertables of continuous aggregates are marked. Sizes follow the same rule as `timescale_list_tables`; `timescale_describe_table` has one hypertable's detailed size. |
 | `timescale_list_chunks` | `database`, `schema`, `hypertable`, `limit?` (50), `newest_first?` (true) | Chunks with time / integer range, compression state, tablespace, creation time and size. |
 | `timescale_list_continuous_aggregates` | `database` | Continuous aggregates with definition, source and materialization hypertable, `materialized_only`, compression and refresh policy. Empty on the Apache-licensed build. |
 | `timescale_list_jobs` | `database` | Background jobs (retention, compression, reorder, refresh policies, user-defined actions) with schedule, config, target and statistics. |
@@ -100,6 +100,18 @@ The server also publishes instructions that tell a model how to approach
 time-series data here: `time_bucket()` over a bounded time range, continuous
 aggregates for long ranges, `timescale_describe_table` for the time column and
 chunk interval.
+
+Catalog listings are bounded so they stay predictable under the statement
+timeout on a database with hundreds of hypertables or thousands of chunks:
+`timescale_list_tables` and `timescale_list_hypertables` return one page
+(`limit`, `offset`) in a stable schema-then-name order and report
+`total_count` and `truncated`. Sizes are the expensive part — every chunk file
+has to be measured — so a page of 50 or more relations skips them by default
+and says so in `note`; `include_sizes: true` sizes that page in one set-based
+statement over TimescaleDB's per-chunk size view instead of one
+`hypertable_size()` call per row, and `include_sizes: false` never sizes.
+`timescale_describe_table` remains the place for one hypertable's detailed
+size.
 
 ## Authentication and the caller's identity
 
@@ -233,10 +245,13 @@ DEMO_PASSWORD=$(kubectl -n timescale-demo get secret timescaledb-data-reader-use
 ```
 
 `make test` runs the unit tests; `make test-integration` starts a throwaway
-TimescaleDB container and runs the integration suite (hypertable, continuous
-aggregate, policies, truncation, refused writes, attribution in
-`pg_stat_activity`, statement timeout). `MCP_TIMESCALE_TEST_DSN` points it at
-an existing database instead.
+TimescaleDB container and runs the integration suite (hypertable with
+compressed and uncompressed chunks, continuous aggregate, policies,
+truncation, refused writes, attribution in `pg_stat_activity`, statement
+timeout, a generated schema of 500 hypertables that both listings must page
+and size within a second, and the listings as a plain reader role).
+`MCP_TIMESCALE_TEST_DSN` points it at an existing database instead; the suite
+creates schemas `public.metrics`, `many` and the role `mcp_it_reader` there.
 
 ## Kubernetes
 

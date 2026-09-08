@@ -104,5 +104,21 @@ truncation and an error class for every call.
   rows keyed by column name so a model does not have to line up positions.
   `timescale_query` returns `columns` + positional `rows` because that is the
   compact shape for data.
+- **Catalog listings are paged and size on demand.** `timescale_list_tables`
+  and `timescale_list_hypertables` run three statements in one transaction:
+  a count, the ordered page (`ORDER BY schema, name LIMIT … OFFSET …`) and,
+  only when wanted, one set-based size statement for that page. Sizing a
+  hypertable means `stat()`-ing every chunk file, and `hypertable_size()`
+  per row re-plans that walk for every hypertable, so a catalog with
+  hundreds of hypertables could spend the whole statement timeout on a
+  listing. The size statement joins the page's relations to TimescaleDB's
+  per-chunk size view (`_timescaledb_internal.hypertable_chunk_local_size`,
+  what `hypertable_size()` itself reads; readable by any role) in a
+  `MATERIALIZED` CTE — one pass, identical numbers — and falls back to
+  `hypertable_size()` per row only when a TimescaleDB build lacks the view.
+  Pages of 50 or more relations skip sizes unless `include_sizes` is true; in
+  the automatic mode a failed size statement degrades to a listing without
+  sizes plus a note rather than an error. `timescale_describe_table` keeps
+  the detailed size of one hypertable.
 - **JSON in text content, no structuredContent.** muster mirrors
   structuredContent twice; the text content is the carrier every client reads.

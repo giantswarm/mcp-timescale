@@ -26,7 +26,8 @@ import (
 // Instructions is the server-level hint clients show their model.
 const Instructions = `mcp-timescale gives read-only access to TimescaleDB / PostgreSQL databases, acting as the calling person.
 Start with timescale_list_databases, then timescale_list_hypertables or timescale_list_tables to see what exists and
-timescale_describe_table for columns, the time dimension, chunk interval, compression and retention policies.
+timescale_describe_table for columns, the time dimension, chunk interval, compression, retention policies and detailed size.
+Listings are ordered by schema and name and paged (limit, offset); they carry sizes only for small pages unless include_sizes is set.
 Use timescale_query for analysis: time_bucket('1 hour', <time column>) with aggregates over a bounded WHERE <time column> > now() - interval '...' range
 is the idiomatic TimescaleDB shape; prefer continuous aggregates (timescale_list_continuous_aggregates) for long ranges.
 Every statement runs in a READ ONLY transaction, is capped by max_rows and a statement timeout, and is attributed to you via application_name.`
@@ -40,6 +41,8 @@ const (
 	argLimit      = "limit"
 	argHypertable = "hypertable"
 	argTimeoutSec = "timeout_seconds"
+	argOffset     = "offset"
+	argSizes      = "include_sizes"
 )
 
 // LocalCallerEmail is the identity used when the server runs without OAuth
@@ -304,15 +307,25 @@ func argInt(req mcp.CallToolRequest, key string, def int) (int, error) {
 
 // argBool reads an optional boolean argument.
 func argBool(req mcp.CallToolRequest, key string, def bool) (bool, error) {
+	b, set, err := argBoolSet(req, key)
+	if err != nil || !set {
+		return def, err
+	}
+	return b, nil
+}
+
+// argBoolSet reads an optional boolean argument and reports whether the
+// caller set it, for arguments whose default is decided at run time.
+func argBoolSet(req mcp.CallToolRequest, key string) (bool, bool, error) {
 	v, ok := req.GetArguments()[key]
 	if !ok || v == nil {
-		return def, nil
+		return false, false, nil
 	}
 	b, isBool := v.(bool)
 	if !isBool {
-		return false, &argError{fmt.Sprintf("argument %s must be a boolean", key)}
+		return false, true, &argError{fmt.Sprintf("argument %s must be a boolean", key)}
 	}
-	return b, nil
+	return b, true, nil
 }
 
 // errorClass labels an error for the audit log.
@@ -376,4 +389,18 @@ type listResult struct {
 	Database string `json:"database,omitempty"`
 	Items    any    `json:"items"`
 	Count    int    `json:"count"`
+}
+
+// pageResult is the envelope of the paged listings (tables, hypertables):
+// listResult plus the page bounds and whether the rows carry sizes. Note
+// tells a model what was left out and how to get it.
+type pageResult struct {
+	Database      string `json:"database,omitempty"`
+	Items         any    `json:"items"`
+	Count         int    `json:"count"`
+	TotalCount    int    `json:"total_count"`
+	Offset        int    `json:"offset"`
+	Truncated     bool   `json:"truncated"`
+	SizesIncluded bool   `json:"sizes_included"`
+	Note          string `json:"note,omitempty"`
 }
