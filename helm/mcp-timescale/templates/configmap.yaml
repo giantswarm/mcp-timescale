@@ -24,6 +24,9 @@ data:
   {{- if .Values.oauth.allowLocalhostRedirectURIs }}
   OAUTH_ALLOW_LOCALHOST_REDIRECT_URIS: "true"
   {{- end }}
+  {{- if .Values.oauth.allowPrivateURLs }}
+  OAUTH_ALLOW_PRIVATE_URLS: "true"
+  {{- end }}
   {{- else }}
   OAUTH_ENABLED: "false"
   {{- end }}

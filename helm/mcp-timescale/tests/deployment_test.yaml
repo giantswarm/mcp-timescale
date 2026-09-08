@@ -96,3 +96,25 @@ tests:
               secretKeyRef:
                 name: mcp-timescale-dex
                 key: client-secret
+
+  - template: templates/configmap.yaml
+    it: keeps mcp-oauth's SSRF guard by default (no OAUTH_ALLOW_PRIVATE_URLS)
+    values:
+      - ../ci/ci-values.yaml
+    asserts:
+      - notExists:
+          path: data.OAUTH_ALLOW_PRIVATE_URLS
+
+  - template: templates/configmap.yaml
+    it: renders OAUTH_ALLOW_PRIVATE_URLS when the Dex issuer resolves to a private address
+    values:
+      - ../ci/ci-values.yaml
+    set:
+      oauth.allowPrivateURLs: true
+    asserts:
+      - equal:
+          path: data.OAUTH_ALLOW_PRIVATE_URLS
+          value: "true"
+      - equal:
+          path: data.OAUTH_DEX_ISSUER_URL
+          value: https://dex.example.test
