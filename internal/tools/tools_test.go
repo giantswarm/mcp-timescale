@@ -31,7 +31,10 @@ const (
 	aliceEmail   = "alice@example.com"
 	toolQuery    = "timescale_query"
 	toolList     = "timescale_list_databases"
+	toolTables   = "timescale_list_tables"
+	toolHypers   = "timescale_list_hypertables"
 	sqlOne       = "SELECT 1"
+	sslDisable   = "disable"
 )
 
 // unreachable databases: port 1 on loopback refuses immediately, so
@@ -39,10 +42,10 @@ const (
 func testRegistry(t *testing.T, restricted bool) *timescale.Registry {
 	t.Helper()
 	dbs := []config.Database{
-		{Name: dbOpen, Description: "open to all", Host: "127.0.0.1", Port: 1, DBName: "x", SSLMode: "disable", User: "u", Password: "topsecret", MaxRows: 500, StatementTimeout: 30 * time.Second, MaxConnections: 1},
+		{Name: dbOpen, Description: "open to all", Host: "127.0.0.1", Port: 1, DBName: "x", SSLMode: sslDisable, User: "u", Password: "topsecret", MaxRows: 500, StatementTimeout: 30 * time.Second, MaxConnections: 1},
 	}
 	if restricted {
-		dbs = append(dbs, config.Database{Name: dbRestricted, Host: "127.0.0.1", Port: 1, DBName: "y", SSLMode: "disable", User: "u", Password: "topsecret", AllowedGroups: []string{groupA}, MaxRows: 20, StatementTimeout: 10 * time.Second, MaxConnections: 1})
+		dbs = append(dbs, config.Database{Name: dbRestricted, Host: "127.0.0.1", Port: 1, DBName: "y", SSLMode: sslDisable, User: "u", Password: "topsecret", AllowedGroups: []string{groupA}, MaxRows: 20, StatementTimeout: 10 * time.Second, MaxConnections: 1})
 	}
 	reg, err := timescale.NewRegistry(dbs)
 	if err != nil {
@@ -299,7 +302,44 @@ func TestArgumentTypesAndBounds(t *testing.T) {
 	h.mustErr(ctx, "timescale_list_chunks", map[string]any{argSchema: schemaPublic}, "argument hypertable is required")
 	h.mustErr(ctx, "timescale_describe_table", map[string]any{argTable: "m"}, "argument schema is required")
 	h.mustErr(ctx, "timescale_sample_rows", map[string]any{argSchema: schemaPublic, argTable: "m", argLimit: 0}, "limit must be at least 1")
-	h.mustErr(ctx, "timescale_list_tables", map[string]any{"include_views": "no"}, "argument include_views must be a boolean")
+	h.mustErr(ctx, toolTables, map[string]any{"include_views": "no"}, "argument include_views must be a boolean")
+	for _, tool := range []string{toolTables, toolHypers} {
+		h.mustErr(ctx, tool, map[string]any{argSizes: "yes"}, "argument include_sizes must be a boolean")
+		h.mustErr(ctx, tool, map[string]any{argLimit: 0}, "argument limit must be between 1 and 1000")
+		h.mustErr(ctx, tool, map[string]any{argLimit: 1001}, "argument limit must be between 1 and 1000")
+		h.mustErr(ctx, tool, map[string]any{argOffset: -1}, "argument offset must be at least 0")
+		h.mustErr(ctx, tool, map[string]any{argOffset: 2.5}, "argument offset must be an integer")
+		// Valid paging arguments pass validation and reach the (dead) pool.
+		h.mustErr(ctx, tool, map[string]any{argSizes: true, argLimit: 1000, argOffset: 10, argSchema: schemaPublic}, "cannot connect to database open")
+	}
+}
+
+func TestPagedListingSchemas(t *testing.T) {
+	h := newHarness(t, Deps{Registry: testRegistry(t, false)}, true)
+	res, err := h.cli.ListTools(context.Background(), mcp.ListToolsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name != toolTables && tool.Name != toolHypers {
+			continue
+		}
+		for _, arg := range []string{argSchema, argLimit, argOffset, argSizes} {
+			if _, ok := tool.InputSchema.Properties[arg]; !ok {
+				t.Errorf("%s: missing argument %s", tool.Name, arg)
+			}
+		}
+		sizes, _ := tool.InputSchema.Properties[argSizes].(map[string]any)
+		if sizes["type"] != "boolean" {
+			t.Errorf("%s: include_sizes must be a boolean, got %v", tool.Name, sizes)
+		}
+		if _, hasDefault := sizes["default"]; hasDefault {
+			t.Errorf("%s: include_sizes has no static default, its default depends on the page size: %v", tool.Name, sizes)
+		}
+		if !strings.Contains(tool.Description, "include_sizes") || !strings.Contains(tool.Description, "timescale_describe_table") {
+			t.Errorf("%s: description must explain include_sizes and point at timescale_describe_table: %s", tool.Name, tool.Description)
+		}
+	}
 }
 
 func TestSQLRejectedBeforeAnyConnection(t *testing.T) {

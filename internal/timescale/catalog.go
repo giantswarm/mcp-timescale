@@ -149,48 +149,215 @@ func (d *Database) Schemas(ctx context.Context, caller string) ([]Row, error) {
 		FROM pg_catalog.pg_namespace n WHERE `+hiddenSchemaFilter+` ORDER BY n.nspname`, "n.nspname"))
 }
 
-// Tables lists tables and optionally views. With schema == "" the hidden
+// SizeMode says whether a catalog listing carries total sizes.
+type SizeMode int
+
+const (
+	// SizesAuto includes sizes when the page holds fewer than SizeThreshold
+	// relations and skips them otherwise.
+	SizesAuto SizeMode = iota
+	// SizesAlways sizes every relation of the page.
+	SizesAlways
+	// SizesNever lists without sizes.
+	SizesNever
+)
+
+// SizeThreshold is the page size from which SizesAuto stops computing
+// sizes: sizing means stat()-ing every chunk file, and a large catalog
+// can spend the whole statement timeout on it.
+const SizeThreshold = 50
+
+// DefaultListLimit bounds a listing page when the caller names no limit.
+const DefaultListLimit = 200
+
+// ListOptions bounds and shapes a catalog listing.
+type ListOptions struct {
+	// Schema restricts the listing to one schema; "" lists every visible
+	// schema (Tables skips the hidden ones then).
+	Schema string
+	// IncludeViews adds views and materialized views to Tables.
+	IncludeViews bool
+	// Limit and Offset page the listing, which is ordered by schema, name.
+	Limit  int
+	Offset int
+	Sizes  SizeMode
+}
+
+// Listing is one page of a catalog listing.
+type Listing struct {
+	Items []Row
+	// TotalCount is the number of relations the listing matched before
+	// paging.
+	TotalCount int
+	// SizesIncluded reports whether the rows carry total_bytes/total_size.
+	SizesIncluded bool
+	// SizesError is set when SizesAuto wanted sizes but computing them
+	// failed (for example on the statement timeout); the listing itself is
+	// intact and SizesIncluded is false.
+	SizesError error
+}
+
+// Tables lists tables and optionally views. With no schema the hidden
 // schemas are skipped; a named schema is listed even when internal.
-func (d *Database) Tables(ctx context.Context, caller, schema string, includeViews bool) ([]Row, error) {
+func (d *Database) Tables(ctx context.Context, caller string, opts ListOptions) (*Listing, error) {
 	kinds := "('r','p','f')"
-	if includeViews {
+	if opts.IncludeViews {
 		kinds = "('r','p','v','m','f')"
 	}
-	return d.rowsTS(ctx, caller, func(ctx context.Context, tx pgx.Tx, ts bool) ([]Row, error) {
+	return d.listTS(ctx, caller, func(ctx context.Context, tx pgx.Tx, ts bool) (*Listing, error) {
 		var where string
 		var args []any
-		if schema == "" {
+		if opts.Schema == "" {
 			where = fmt.Sprintf(hiddenSchemaFilter, "n.nspname")
 		} else {
 			where = "n.nspname = $1"
-			args = append(args, schema)
+			args = append(args, opts.Schema)
 		}
-		sizeExpr := "pg_total_relation_size(c.oid)"
 		joins, tsCols := "", "false AS is_hypertable, false AS is_continuous_aggregate,"
 		if ts {
 			joins = `LEFT JOIN timescaledb_information.hypertables h ON h.hypertable_schema = n.nspname AND h.hypertable_name = c.relname
 				LEFT JOIN timescaledb_information.continuous_aggregates ca ON ca.view_schema = n.nspname AND ca.view_name = c.relname`
 			tsCols = "h.hypertable_name IS NOT NULL AS is_hypertable, ca.view_name IS NOT NULL AS is_continuous_aggregate, h.num_chunks, h.compression_enabled,"
-			sizeExpr = "CASE WHEN h.hypertable_name IS NOT NULL THEN hypertable_size(c.oid) ELSE pg_total_relation_size(c.oid) END"
 		}
-		sql := fmt.Sprintf(`SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS relkind,
+		from := fmt.Sprintf(`FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN %s AND %s`, kinds, where)
+		listSQL := fmt.Sprintf(`SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS relkind,
 			pg_get_userbyid(c.relowner) AS owner, c.reltuples::bigint AS row_estimate, %s
-			%s AS total_bytes, pg_size_pretty(%s) AS total_size,
 			obj_description(c.oid, 'pg_class') AS comment
 			FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace %s
-			WHERE c.relkind IN %s AND %s ORDER BY 1, 2`, tsCols, sizeExpr, sizeExpr, joins, kinds, where)
-		rows, err := queryRows(ctx, tx, sql, args...)
+			WHERE c.relkind IN %s AND %s ORDER BY n.nspname, c.relname`, tsCols, joins, kinds, where)
+		l, err := page(ctx, tx, ts, opts, "SELECT count(*) "+from, listSQL, args)
 		if err != nil {
 			return nil, err
 		}
-		for _, r := range rows {
+		for _, r := range l.Items {
 			if rk, ok := r["relkind"].(string); ok {
 				r["kind"] = relationKinds[rk]
 				delete(r, "relkind")
 			}
 		}
-		return rows, nil
+		return l, nil
 	})
+}
+
+// page runs one catalog listing: the count, the ordered page (LIMIT/OFFSET
+// are appended to listSQL) and, when opts ask for them, the sizes of the
+// page's relations in one set-based statement.
+func page(ctx context.Context, tx pgx.Tx, ts bool, opts ListOptions, countSQL, listSQL string, args []any) (*Listing, error) {
+	limit, offset := opts.Limit, opts.Offset
+	if limit <= 0 {
+		limit = DefaultListLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	l := &Listing{Items: []Row{}}
+	if err := tx.QueryRow(ctx, countSQL, args...).Scan(&l.TotalCount); err != nil {
+		return nil, err
+	}
+	n := len(args)
+	pageArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := queryRows(ctx, tx, fmt.Sprintf("%s LIMIT $%d OFFSET $%d", listSQL, n+1, n+2), pageArgs...)
+	if err != nil {
+		return nil, err
+	}
+	l.Items = rows
+	switch {
+	case opts.Sizes == SizesNever:
+		return l, nil
+	case opts.Sizes == SizesAuto && len(rows) >= SizeThreshold:
+		return l, nil
+	}
+	l.SizesIncluded = true
+	if len(rows) == 0 {
+		return l, nil
+	}
+	if err := attachSizes(ctx, tx, ts, rows); err != nil {
+		if opts.Sizes == SizesAlways {
+			return nil, err
+		}
+		l.SizesIncluded, l.SizesError = false, err
+	}
+	return l, nil
+}
+
+// attachSizes adds total_bytes and total_size to rows (keyed by schema and
+// name) from one statement over the page. Hypertables are sized like
+// hypertable_size() does — the relation plus every chunk, compressed data
+// included — but for the whole page at once from TimescaleDB's per-chunk
+// size view instead of one function call per row.
+func attachSizes(ctx context.Context, tx pgx.Tx, ts bool, rows []Row) error {
+	schemas, names := make([]string, 0, len(rows)), make([]string, 0, len(rows))
+	byKey := make(map[string]Row, len(rows))
+	for _, r := range rows {
+		s, _ := r["schema"].(string)
+		n, _ := r["name"].(string)
+		schemas, names = append(schemas, s), append(names, n)
+		byKey[s+"\x00"+n] = r
+	}
+	view := ""
+	if ts {
+		var err error
+		if view, err = chunkSizeView(ctx, tx); err != nil {
+			return err
+		}
+	}
+	sizes, err := queryRows(ctx, tx, sizesSQL(ts, view), schemas, names)
+	if err != nil {
+		return err
+	}
+	for _, s := range sizes {
+		schema, _ := s["schema"].(string)
+		name, _ := s["name"].(string)
+		if r, ok := byKey[schema+"\x00"+name]; ok {
+			r["total_bytes"], r["total_size"] = s["total_bytes"], s["total_size"]
+		}
+	}
+	return nil
+}
+
+// chunkSizeViews are the names TimescaleDB has given its per-chunk size
+// view (the one hypertable_size() itself reads), newest first.
+var chunkSizeViews = []string{"_timescaledb_internal.hypertable_chunk_local_size", "_timescaledb_functions.hypertable_chunk_local_size"}
+
+// chunkSizeView returns the installed per-chunk size view, or "" when this
+// TimescaleDB has none (sizes then fall back to hypertable_size per row).
+func chunkSizeView(ctx context.Context, tx pgx.Tx) (string, error) {
+	for _, v := range chunkSizeViews {
+		var present bool
+		if err := tx.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", v).Scan(&present); err != nil {
+			return "", err
+		}
+		if present {
+			return v, nil
+		}
+	}
+	return "", nil
+}
+
+// sizesSQL builds the set-based size statement for a page of relations
+// given as parallel arrays $1 (schemas) and $2 (names).
+func sizesSQL(ts bool, chunkView string) string {
+	from := `FROM unnest($1::text[], $2::text[]) AS p(schema, name)
+		JOIN pg_catalog.pg_namespace n ON n.nspname = p.schema::name
+		JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = p.name::name`
+	with, expr := "", "pg_total_relation_size(c.oid)"
+	switch {
+	case chunkView != "":
+		// One pass over the page's chunks; MATERIALIZED keeps the planner
+		// from re-running the aggregate for every relation.
+		with = fmt.Sprintf(`WITH chunks AS MATERIALIZED (
+			SELECT v.hypertable_schema AS schema, v.hypertable_name AS name, sum(v.total_bytes + v.compressed_total_size)::bigint AS bytes
+			FROM unnest($1::text[], $2::text[]) AS p(schema, name)
+			JOIN %s v ON v.hypertable_schema = p.schema::name AND v.hypertable_name = p.name::name
+			GROUP BY 1, 2) `, chunkView)
+		from += " LEFT JOIN chunks ch ON ch.schema = n.nspname AND ch.name = c.relname"
+		expr = "pg_total_relation_size(c.oid) + COALESCE(ch.bytes, 0)"
+	case ts:
+		from += " LEFT JOIN timescaledb_information.hypertables h ON h.hypertable_schema = n.nspname AND h.hypertable_name = c.relname"
+		expr = "CASE WHEN h.hypertable_name IS NOT NULL THEN hypertable_size(c.oid) ELSE pg_total_relation_size(c.oid) END"
+	}
+	return fmt.Sprintf(`%sSELECT schema, name, total_bytes, pg_size_pretty(total_bytes) AS total_size
+		FROM (SELECT p.schema, p.name, %s AS total_bytes %s) s`, with, expr, from)
 }
 
 // TableDescription is the result of timescale_describe_table.
@@ -334,22 +501,26 @@ func (d *Database) DescribeTable(ctx context.Context, caller, schema, table stri
 	return desc, nil
 }
 
-// Hypertables lists hypertables with size, chunk count, compression and
-// the primary (time) dimension.
-func (d *Database) Hypertables(ctx context.Context, caller string) ([]Row, error) {
-	return d.rowsTS(ctx, caller, func(ctx context.Context, tx pgx.Tx, ts bool) ([]Row, error) {
+// Hypertables lists hypertables with chunk count, compression, the primary
+// (time) dimension and, per opts, their size.
+func (d *Database) Hypertables(ctx context.Context, caller string, opts ListOptions) (*Listing, error) {
+	return d.listTS(ctx, caller, func(ctx context.Context, tx pgx.Tx, ts bool) (*Listing, error) {
 		if !ts {
 			return nil, ErrNoTimescaleDB
 		}
-		return queryRows(ctx, tx, `SELECT h.hypertable_schema AS schema, h.hypertable_name AS name, h.owner, h.num_dimensions, h.num_chunks, h.compression_enabled,
+		where := ""
+		var args []any
+		if opts.Schema != "" {
+			where = " WHERE h.hypertable_schema = $1"
+			args = append(args, opts.Schema)
+		}
+		return page(ctx, tx, ts, opts, "SELECT count(*) FROM timescaledb_information.hypertables h"+where, `SELECT h.hypertable_schema AS schema, h.hypertable_name AS name, h.owner, h.num_dimensions, h.num_chunks, h.compression_enabled,
 			d.column_name AS time_column, d.column_type::text AS time_column_type, d.time_interval::text AS chunk_time_interval, d.integer_interval AS chunk_integer_interval,
-			hypertable_size(format('%I.%I', h.hypertable_schema, h.hypertable_name)::regclass) AS total_bytes,
-			pg_size_pretty(hypertable_size(format('%I.%I', h.hypertable_schema, h.hypertable_name)::regclass)) AS total_size,
 			CASE WHEN ca.view_name IS NOT NULL THEN format('%I.%I', ca.view_schema, ca.view_name) END AS materializes_continuous_aggregate
 			FROM timescaledb_information.hypertables h
 			LEFT JOIN timescaledb_information.dimensions d ON d.hypertable_schema = h.hypertable_schema AND d.hypertable_name = h.hypertable_name AND d.dimension_number = 1
-			LEFT JOIN timescaledb_information.continuous_aggregates ca ON ca.materialization_hypertable_schema = h.hypertable_schema AND ca.materialization_hypertable_name = h.hypertable_name
-			ORDER BY 1, 2`)
+			LEFT JOIN timescaledb_information.continuous_aggregates ca ON ca.materialization_hypertable_schema = h.hypertable_schema AND ca.materialization_hypertable_name = h.hypertable_name`+
+			where+" ORDER BY h.hypertable_schema, h.hypertable_name", args)
 	})
 }
 
@@ -538,6 +709,23 @@ func (d *Database) rowsTS(ctx context.Context, caller string, fn func(ctx contex
 	}
 	if out == nil {
 		out = []Row{}
+	}
+	return out, nil
+}
+
+// listTS is rowsTS for paged listings.
+func (d *Database) listTS(ctx context.Context, caller string, fn func(ctx context.Context, tx pgx.Tx, ts bool) (*Listing, error)) (*Listing, error) {
+	var out *Listing
+	err := d.withTx(ctx, caller, 0, func(ctx context.Context, tx pgx.Tx) error {
+		_, ts, err := timescaleVersion(ctx, tx)
+		if err != nil {
+			return err
+		}
+		out, err = fn(ctx, tx, ts)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

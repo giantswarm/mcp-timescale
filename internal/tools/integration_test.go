@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,11 @@ const (
 	itHourly       = "metrics_hourly"
 	sqlDelete      = "DELETE FROM metrics"
 	sqlTwoStmts    = "SELECT 1; DELETE FROM metrics"
+	// manySchema holds the large-catalog fixture (#6): manyCount hypertables.
+	manySchema     = "many"
+	manyCount      = 500
+	readerRole     = "mcp_it_reader"
+	readerPassword = "mcp-it-reader" //nolint:gosec // throwaway role in the test database
 )
 
 func integrationDSN(t *testing.T) string {
@@ -70,6 +77,10 @@ func setupFixtures(t *testing.T, conn *pgx.Conn) {
 				n * 1.5, decode('cafe', 'hex'), ARRAY['a', 'b']
 			FROM generate_series(1, 300) AS n`,
 		"ALTER TABLE public.metrics SET (timescaledb.compress, timescaledb.compress_segmentby = 'device')",
+		// Compress the chunks holding the rows shifted two days back, so the
+		// fixture has compressed and uncompressed chunks and sizes must
+		// account for both.
+		"SELECT compress_chunk(c) FROM show_chunks('public.metrics', older_than => interval '1 day') AS c",
 		"SELECT add_compression_policy('public.metrics', interval '7 days')",
 		"SELECT add_retention_policy('public.metrics', interval '90 days')",
 		`CREATE MATERIALIZED VIEW public.metrics_hourly WITH (timescaledb.continuous) AS
@@ -83,6 +94,70 @@ func setupFixtures(t *testing.T, conn *pgx.Conn) {
 			t.Fatalf("fixture %q: %v", stmt, err)
 		}
 	}
+}
+
+// setupManyHypertables builds the large-catalog fixture of
+// giantswarm/mcp-timescale#6: manyCount small hypertables with two chunks
+// each in their own schema.
+func setupManyHypertables(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	ctx := context.Background()
+	start := time.Now()
+	for _, stmt := range []string{
+		"DROP SCHEMA IF EXISTS " + manySchema + " CASCADE",
+		"CREATE SCHEMA " + manySchema,
+		`DO $$ DECLARE i int; BEGIN
+			FOR i IN 1..` + strconv.Itoa(manyCount) + ` LOOP
+				EXECUTE format('CREATE TABLE ` + manySchema + `.h%s (ts timestamptz NOT NULL, v double precision)', i);
+				PERFORM create_hypertable(format('` + manySchema + `.h%s', i), 'ts', chunk_time_interval => interval '1 day');
+				EXECUTE format('INSERT INTO ` + manySchema + `.h%s VALUES (now(), 1), (now() - interval ''3 days'', 2)', i);
+			END LOOP;
+		END $$`,
+	} {
+		if _, err := conn.Exec(ctx, stmt); err != nil {
+			t.Fatalf("fixture %q: %v", stmt, err)
+		}
+	}
+	var chunks int
+	if err := conn.QueryRow(ctx, "SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_schema = $1", manySchema).Scan(&chunks); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("created %d hypertables with %d chunks in %s", manyCount, chunks, time.Since(start).Round(time.Millisecond))
+}
+
+// readerHarness runs the tools as a plain reader role (SELECT on public and
+// the generated schema, owner of nothing), the way a Zalando
+// <db>_reader_user reaches a production database.
+func readerHarness(t *testing.T, dsn string, admin *pgx.Conn) *harness {
+	t.Helper()
+	ctx := context.Background()
+	for _, stmt := range []string{
+		`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '` + readerRole + `') THEN CREATE ROLE ` + readerRole + ` LOGIN; END IF; END $$`,
+		"ALTER ROLE " + readerRole + " PASSWORD '" + readerPassword + "'",
+		"GRANT USAGE ON SCHEMA public, " + manySchema + " TO " + readerRole,
+		"GRANT SELECT ON ALL TABLES IN SCHEMA public, " + manySchema + " TO " + readerRole,
+	} {
+		if _, err := admin.Exec(ctx, stmt); err != nil {
+			t.Fatalf("reader fixture %q: %v", stmt, err)
+		}
+	}
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sslmode := sslDisable
+	if cfg.TLSConfig != nil {
+		sslmode = "require"
+	}
+	reg, err := timescale.NewRegistry([]config.Database{{
+		Name: "reader", Description: "integration, plain reader role", Host: cfg.Host, Port: int(cfg.Port), DBName: cfg.Database, SSLMode: sslmode,
+		User: readerRole, Password: readerPassword, MaxRows: itMaxRows, StatementTimeout: 5 * time.Second, MaxConnections: 2,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(reg.Close)
+	return newHarness(t, Deps{Registry: reg}, true)
 }
 
 func integrationHarness(t *testing.T, dsn string) (*harness, *timescale.Database) {
@@ -138,22 +213,38 @@ func TestIntegration(t *testing.T) {
 
 	t.Run("list_tables", func(t *testing.T) {
 		h := h.with(t)
-		out := h.mustOK(ctx, "timescale_list_tables", map[string]any{argSchema: schemaPublic})
+		out := h.mustOK(ctx, toolTables, map[string]any{argSchema: schemaPublic})
 		byName := indexBy(out["items"], "name")
 		m, ok := byName[itMetrics]
 		if !ok || m["is_hypertable"] != true || m["kind"] != "table" || m["comment"] != "integration fixture" || m["total_bytes"].(float64) <= 0 {
 			t.Errorf("metrics = %v", m)
 		}
+		if out["sizes_included"] != true || out["truncated"] != false || out["total_count"] != out["count"] || out["note"] != nil {
+			t.Errorf("a small page carries sizes and no note: %v", out)
+		}
+		// The set-based size equals what hypertable_size() reports for the
+		// same hypertable (compressed and uncompressed chunks included).
+		desc := h.mustOK(ctx, "timescale_describe_table", map[string]any{argSchema: schemaPublic, argTable: itMetrics})
+		if want := desc["hypertable"].(map[string]any)["size"].(map[string]any)["total_bytes"]; m["total_bytes"] != want {
+			t.Errorf("list_tables total_bytes = %v, hypertable_detailed_size = %v", m["total_bytes"], want)
+		}
 		if c, ok := byName[itHourly]; !ok || c["is_continuous_aggregate"] != true || c["kind"] != "view" {
 			t.Errorf("metrics_hourly = %v", c)
 		}
-		noViews := h.mustOK(ctx, "timescale_list_tables", map[string]any{argSchema: schemaPublic, "include_views": false})
+		noViews := h.mustOK(ctx, toolTables, map[string]any{argSchema: schemaPublic, "include_views": false})
 		if _, ok := indexBy(noViews["items"], "name")[itHourly]; ok {
 			t.Error("include_views=false must drop the continuous aggregate view")
 		}
-		internal := h.mustOK(ctx, "timescale_list_tables", map[string]any{argSchema: "_timescaledb_internal"})
+		internal := h.mustOK(ctx, toolTables, map[string]any{argSchema: "_timescaledb_internal"})
 		if internal["count"].(float64) < 1 {
 			t.Error("naming the internal schema must list chunks")
+		}
+		noSizes := h.mustOK(ctx, toolTables, map[string]any{argSchema: schemaPublic, argSizes: false})
+		if noSizes["sizes_included"] != false || noSizes["note"] != nil {
+			t.Errorf("include_sizes=false: %v", noSizes)
+		}
+		if _, sized := indexBy(noSizes["items"], "name")[itMetrics]["total_bytes"]; sized {
+			t.Error("include_sizes=false must leave total_bytes out")
 		}
 	})
 
@@ -214,10 +305,93 @@ func TestIntegration(t *testing.T) {
 
 	t.Run("list_hypertables", func(t *testing.T) {
 		h := h.with(t)
-		out := h.mustOK(ctx, "timescale_list_hypertables", nil)
+		out := h.mustOK(ctx, toolHypers, map[string]any{argSchema: schemaPublic})
 		m, ok := indexBy(out["items"], "name")[itMetrics]
 		if !ok || m["time_column"] != "ts" || m["chunk_time_interval"] != "1 day" || m["compression_enabled"] != true || m["num_chunks"].(float64) < 2 {
 			t.Errorf("hypertable = %v", m)
+		}
+		if out["sizes_included"] != true || m["total_bytes"].(float64) <= 0 || m["total_size"] == nil {
+			t.Errorf("a small page carries sizes: %v", out)
+		}
+		desc := h.mustOK(ctx, "timescale_describe_table", map[string]any{argSchema: schemaPublic, argTable: itMetrics})
+		if want := desc["hypertable"].(map[string]any)["size"].(map[string]any)["total_bytes"]; m["total_bytes"] != want {
+			t.Errorf("list_hypertables total_bytes = %v, hypertable_detailed_size = %v", m["total_bytes"], want)
+		}
+		// The whole database lists too; public.metrics may sit on a later
+		// page behind the generated schema, so only the envelope is checked.
+		all := h.mustOK(ctx, toolHypers, nil)
+		if all["total_count"].(float64) < 1 || all["count"].(float64) > 200 {
+			t.Errorf("unfiltered listing = count %v total %v", all["count"], all["total_count"])
+		}
+	})
+
+	t.Run("many_hypertables", func(t *testing.T) {
+		h := h.with(t)
+		setupManyHypertables(t, admin)
+		// Acceptance criterion of giantswarm/mcp-timescale#6: listing 500
+		// hypertables finishes within a second, with and without sizes.
+		timed := func(name string, args map[string]any) map[string]any {
+			start := time.Now()
+			out := h.mustOK(ctx, name, args)
+			d := time.Since(start)
+			t.Logf("%s(%v): %d of %v rows, sizes_included=%v in %s", name, args, len(out["items"].([]any)), out["total_count"], out["sizes_included"], d.Round(time.Millisecond))
+			if d > time.Second {
+				t.Errorf("%s(%v) took %s, want under 1s", name, args, d)
+			}
+			return out
+		}
+		for _, tool := range []string{toolHypers, toolTables} {
+			// Default: the page is above the size threshold, so no sizes
+			// and a note that says how to get them.
+			out := timed(tool, map[string]any{argSchema: manySchema})
+			if out["count"].(float64) != 200 || out["total_count"].(float64) != manyCount || out["truncated"] != true || out["sizes_included"] != false {
+				t.Errorf("%s default page = count %v total %v truncated %v sizes %v", tool, out["count"], out["total_count"], out["truncated"], out["sizes_included"])
+			}
+			if note, _ := out["note"].(string); !strings.Contains(note, "include_sizes=true") || !strings.Contains(note, "offset") {
+				t.Errorf("%s note = %q", tool, note)
+			}
+			first := out["items"].([]any)[0].(map[string]any)
+			if _, sized := first["total_bytes"]; sized {
+				t.Errorf("%s: sizes skipped but total_bytes present: %v", tool, first)
+			}
+			// Explicit include_sizes sizes the whole page in one pass.
+			out = timed(tool, map[string]any{argSchema: manySchema, argSizes: true, argLimit: 1000})
+			if out["count"].(float64) != manyCount || out["truncated"] != false || out["sizes_included"] != true || out["note"] != nil {
+				t.Errorf("%s sized page = count %v truncated %v sizes %v note %v", tool, out["count"], out["truncated"], out["sizes_included"], out["note"])
+			}
+			for _, it := range out["items"].([]any) {
+				row := it.(map[string]any)
+				if b, _ := row["total_bytes"].(float64); b <= 0 || row["total_size"] == nil {
+					t.Fatalf("%s: unsized row %v", tool, row)
+				}
+			}
+			// Stable ordering: pages are prefixes of the schema, name order.
+			last := timed(tool, map[string]any{argSchema: manySchema, argLimit: 10, argOffset: manyCount - 5})
+			if last["count"].(float64) != 5 || last["truncated"] != false || last["sizes_included"] != true || last["offset"].(float64) != manyCount-5 {
+				t.Errorf("%s last page = %v", tool, last)
+			}
+			names := namesOf(out["items"], "name")
+			if !sort.StringsAreSorted(names) || names[len(names)-1] != namesOf(last["items"], "name")[4] {
+				t.Errorf("%s: ordering is not stable across pages: %v … %v", tool, names[len(names)-5:], namesOf(last["items"], "name"))
+			}
+		}
+	})
+
+	t.Run("sizes_as_plain_reader", func(t *testing.T) {
+		// A reader role without ownership of anything must still get sizes:
+		// the per-chunk size view the set-based query reads is what
+		// hypertable_size() itself reads.
+		readerH := readerHarness(t, dsn, admin)
+		out := readerH.mustOK(ctx, toolHypers, map[string]any{argSchema: manySchema, argSizes: true, argLimit: 1000})
+		if out["count"].(float64) != manyCount || out["sizes_included"] != true {
+			t.Fatalf("reader listing = count %v sizes %v", out["count"], out["sizes_included"])
+		}
+		if b, _ := out["items"].([]any)[0].(map[string]any)["total_bytes"].(float64); b <= 0 {
+			t.Errorf("reader gets no sizes: %v", out["items"].([]any)[0])
+		}
+		tables := readerH.mustOK(ctx, toolTables, map[string]any{argSchema: schemaPublic})
+		if m := indexBy(tables["items"], "name")[itMetrics]; tables["sizes_included"] != true || m["total_bytes"].(float64) <= 0 {
+			t.Errorf("reader list_tables = %v", tables)
 		}
 	})
 
