@@ -21,9 +21,40 @@ workflows:
         # override their own `make test`. See devctl makefile gen and the
         # make-target-ci-interface ADR.
         test_target: test
+        # Cross-platform binaries attached to the GitHub Release by the
+        # upload-release-assets job below (cli flavour). yamllint disables the
+        # line-length rule for the 132-char matrix value.
+        # yamllint disable-line rule:line-length
+        architectures: "linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64,windows/arm64"
+        # The six-arch cross-compile is cold after every go.sum bump (the GOCACHE
+        # restore misses), so compile the architectures concurrently on a larger
+        # box instead of sequentially on 2 vCPUs. build_concurrency is opt-in in
+        # the orb because it only pays off at a bigger resource_class. A repo
+        # whose binary is large enough that the cold full-matrix build OOMs at
+        # `auto` lowers build_concurrency (and/or raises resource_class) via
+        # gen.ci.buildConcurrency / gen.ci.resourceClass.
+        # build_concurrency is a string-typed orb param: "auto" is a valid bare
+        # scalar, but a bare number (e.g. 2) parses as an int and the orb rejects
+        # it -- so quote anything that isn't "auto".
+        build_concurrency: auto
+        resource_class: large
         filters:
           tags:
             only: /^v.*/
+
+    # Attach the cross-platform go-build binaries to the GitHub Release on tag
+    # builds. The release itself is created by the repo's auto-release flow.
+    - architect/upload-release-assets:
+        context: architect
+        name: upload-release-assets
+        binary: mcp-timescale
+        requires:
+        - go-build
+        filters:
+          tags:
+            only: /^v.*/
+          branches:
+            ignore: /.*/
 
     # Branch builds (opt-in): amd64 dev image to gsoci for PR validation,
     # coupled with the branch chart push below. v9's push-to-registries always
@@ -46,6 +77,11 @@ workflows:
         context: architect
         name: push-to-registries-release
         split-china-push: true
+        # Cap buildx to the two linux platforms. go-build's architectures
+        # matrix above writes all six targets to .platforms; without this cap
+        # the orb auto-derives --platform from that file and buildx tries to
+        # build the darwin/windows manifests under QEMU and hangs.
+        platforms: "linux/amd64,linux/arm64"
         requires:
         - go-build
         filters:
