@@ -31,9 +31,21 @@ type Auth struct {
 // optional token encryptor, and the mcp-oauth server, and returns an *Auth
 // ready to mount on the MCP mux. Every knob comes from OAUTH_* env vars
 // parsed by mcp-oauth's oauthconfig package — see the README for the full
-// list.
+// list. OAUTH_ALLOW_PRIVATE_URLS is the one knob this package adds on top
+// (privateurls.go).
 func NewAuth(_ context.Context, logger *slog.Logger) (*Auth, error) {
-	provider, err := oauthconfig.ProviderFromEnv()
+	allowPrivate, err := AllowPrivateURLsFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("oauth: %w", err)
+	}
+	if allowPrivate {
+		logger.Warn("SECURITY WARNING: "+EnvAllowPrivateURLs+" is enabled — the Dex issuer and its JWKS endpoint may resolve to private or loopback addresses",
+			"risk", "SSRF guard lifted for OIDC discovery, the token endpoint and the JWKS fetch of the configured identity provider",
+			"recommendation", "Only for an identity provider behind an internal-only load balancer; TLS verification stays on",
+			"cwe", "CWE-918")
+	}
+
+	provider, err := newProvider(logger, allowPrivate)
 	if err != nil {
 		return nil, fmt.Errorf("oauth provider from env: %w", err)
 	}
@@ -57,6 +69,7 @@ func NewAuth(_ context.Context, logger *slog.Logger) (*Auth, error) {
 		_ = storeClose()
 		return nil, fmt.Errorf("oauth config from env: %w", err)
 	}
+	allowPrivateURLs(cfg, allowPrivate)
 
 	srv, err := oauth.NewServerWithCombined(provider, store, cfg, logger)
 	if err != nil {

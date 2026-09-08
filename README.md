@@ -210,6 +210,7 @@ Every knob is an env var; flags override. The OAuth knobs come straight from
 | `OAUTH_DEX_ISSUER_URL` | — | Upstream Dex issuer (provider=dex) |
 | `OAUTH_DEX_CLIENT_ID` / `OAUTH_DEX_CLIENT_SECRET[_FILE]` | — | Dex client |
 | `OAUTH_TRUSTED_AUDIENCES` | — | Audiences of forwarded ID tokens (muster's Dex client ID) |
+| `OAUTH_ALLOW_PRIVATE_URLS` | false | Let the Dex issuer and its JWKS resolve to private/loopback addresses (Dex behind an internal-only load balancer); TLS stays verified. `MCP_OAUTH_ALLOW_PRIVATE_URLS` is accepted as an alias |
 | `OAUTH_STORAGE_BACKEND` | memory | memory \| valkey (valkey for >1 replica with interactive logins) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Tracing; empty disables |
 
@@ -329,6 +330,13 @@ spec:
 Tools then appear in muster with the `x_timescale_` prefix
 (`x_timescale_timescale_query`, …) and every call reaches the database as the
 person who is logged in to muster.
+
+When the installation's Dex resolves to a private address (an internal-only
+load balancer in front of it), set `oauth.allowPrivateURLs: true`. Otherwise
+mcp-oauth's SSRF guard refuses the JWKS fetch (`Token validation failed …
+resolved to restricted IP`) and every forwarded token is rejected. The flag
+lifts the guard for the Dex issuer and its JWKS only; TLS verification stays
+on.
 
 ## Development
 
