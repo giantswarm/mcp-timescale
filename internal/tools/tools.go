@@ -59,8 +59,30 @@ type Deps struct {
 	LocalCaller bool
 }
 
-// Register installs every tool on s.
-func Register(s *mcpsrv.MCPServer, deps Deps) {
+// ReadOnlyTools names every tool this server registers, in registration
+// order. There is exactly one class: every tool reads, none writes, none hands
+// out credentials — so unlike mcp-kubernetes (--non-destructive) or mcp-capi
+// (--read-only) there is no write mode to switch on or off. The list is the
+// classification a new tool has to join before it ships
+// (TestEveryToolIsReadOnlyAndStrict compares it with what the server
+// registers and with the annotations) and what the startup log reports.
+var ReadOnlyTools = []string{
+	"timescale_list_databases",
+	"timescale_get_database_info",
+	"timescale_list_schemas",
+	"timescale_list_tables",
+	"timescale_describe_table",
+	"timescale_list_hypertables",
+	"timescale_list_chunks",
+	"timescale_list_continuous_aggregates",
+	"timescale_list_jobs",
+	"timescale_query",
+	"timescale_explain",
+	"timescale_sample_rows",
+}
+
+// Register installs every tool on s and returns their names (ReadOnlyTools).
+func Register(s *mcpsrv.MCPServer, deps Deps) []string {
 	if deps.Log == nil {
 		deps.Log = slog.Default()
 	}
@@ -76,6 +98,7 @@ func Register(s *mcpsrv.MCPServer, deps Deps) {
 	registerQuery(s, deps)
 	registerExplain(s, deps)
 	registerSampleRows(s, deps)
+	return append([]string(nil), ReadOnlyTools...)
 }
 
 // readOnlyTool builds a tool with the annotations every tool here shares

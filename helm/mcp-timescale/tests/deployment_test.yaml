@@ -1,0 +1,98 @@
+# Deployment template tests for the mcp-timescale Helm chart.
+#
+# They pin the security posture the README promises (no ServiceAccount token,
+# non-root, read-only root filesystem, database credentials mounted read-only
+# from Secrets, nothing secret in a ConfigMap) and the image tag contract.
+#
+# Run with: make helm-test   (helm unittest ./helm/mcp-timescale)
+
+suite: Deployment
+# The deployment includes the two ConfigMaps for its checksum annotations, so
+# they have to be rendered alongside; every test asserts on the deployment.
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+  - templates/configmap-databases.yaml
+tests:
+  - template: templates/deployment.yaml
+    it: starts the server with `serve`, without a ServiceAccount token, as non-root on a read-only root filesystem
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["serve"]
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value: ["ALL"]
+
+  - template: templates/deployment.yaml
+    it: defaults the image tag to the chart appVersion (ABS sets it to the release)
+    chart:
+      appVersion: 1.2.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: gsoci.azurecr.io/giantswarm/mcp-timescale:1.2.3
+
+  - template: templates/deployment.yaml
+    it: honours an explicit image tag
+    set:
+      image.tag: 0.2.0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: gsoci.azurecr.io/giantswarm/mcp-timescale:0.2.0
+
+  - template: templates/deployment.yaml
+    it: mounts the databases file from the ConfigMap and each reader Secret read-only
+    values:
+      - ../ci/ci-values.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: databases
+            mountPath: /etc/mcp-timescale/config
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: db-demo
+            mountPath: /etc/mcp-timescale/secrets/demo
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: db-demo
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ca-verified
+            mountPath: /etc/mcp-timescale/ca/verified
+            readOnly: true
+
+  - template: templates/deployment.yaml
+    it: takes the Dex client credentials from Secrets, never from the ConfigMap
+    values:
+      - ../ci/ci-values.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH_DEX_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: mcp-timescale-dex
+                key: client-secret

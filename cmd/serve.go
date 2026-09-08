@@ -87,7 +87,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		}()
 	}
 
-	shutdownTracing, err := tracing.Init(shutdownCtx, tracing.WithServiceName(serviceName), tracing.WithServiceVersion(version))
+	shutdownTracing, err := tracing.Init(shutdownCtx, tracing.WithServiceName(serviceName), tracing.WithServiceVersion(rootCmd.Version))
 	if err != nil {
 		logger.Warn("otel init failed; continuing without tracing", "error", err)
 	} else {
@@ -116,7 +116,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 
 	toolTimeout := max(registry.MaxStatementTimeout()+toolTimeoutSlack, minToolTimeout)
 	mcp := mcpsrv.NewMCPServer(
-		serviceName, version,
+		serviceName, rootCmd.Version,
 		mcpsrv.WithToolCapabilities(false),
 		mcpsrv.WithRecovery(),
 		mcpsrv.WithInstructions(tools.Instructions),
@@ -125,7 +125,11 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		mcpsrv.WithToolHandlerMiddleware(timeout.New(toolTimeout)),
 		mcpsrv.WithToolHandlerMiddleware(responsecap.New(responsecap.Options{})),
 	)
-	tools.Register(mcp, tools.Deps{Registry: registry, Log: logger, LocalCaller: localCaller})
+	names := tools.Register(mcp, tools.Deps{Registry: registry, Log: logger, LocalCaller: localCaller})
+	// The posture line operators grep for (mcp-capi prints the same shape):
+	// there is no write mode to switch, every tool is read-only.
+	logger.Info("Write policy", "readOnly", true, "writeMode", "none", "tools", len(names), "mutatingTools", 0,
+		"note", "every tool runs in a READ ONLY transaction on a read-only role")
 
 	if flagTransport == server.TransportStdio {
 		logger.Info("MCP serving on stdio", "transport", server.TransportStdio)
