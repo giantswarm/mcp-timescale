@@ -1,0 +1,56 @@
+# CI case for the 63-character cut of names and label values
+# (giantswarm/mcp-timescale#7). Linted by chart-testing like every
+# ci/*-values.yaml and rendered by `make helm-verify-labels`, which packages
+# the chart with branch-build versions whose cut lands on a dot and asserts
+# every helm.sh/chart and app.kubernetes.io/name label and every top-level
+# metadata.name stays a valid value.
+#
+# Both overrides are 62 characters followed by ".tail": the dot sits exactly
+# at position 63, where a branch build's helm.sh/chart cut can land. A helper
+# that only trims a trailing "-" leaves that dot behind and the API server
+# rejects the object; the fixed helper drops it and the tail with it, so the
+# rendered names are dash-only and valid for every kind, the Service included.
+nameOverride: mcp-timescale-with-a-long-name-override-that-runs-past-the-cut.tail
+fullnameOverride: mcp-timescale-with-a-long-fullname-override-that-runs-past-cut.tail
+
+# Required values, mirroring ci-values.yaml so the chart renders fully.
+oauth:
+  issuerURL: https://mcp-timescale.example.test
+  dex:
+    issuerURL: https://dex.example.test
+    clientIDSecretRef:
+      name: mcp-timescale-dex
+      key: client-id
+    clientSecretSecretRef:
+      name: mcp-timescale-dex
+      key: client-secret
+  trustedAudiences:
+    - muster-client
+
+databases:
+  - name: demo
+    description: CI placeholder database
+    host: timescale-demo-repl.timescale-demo.svc.cluster.local
+    port: 5432
+    dbname: timescaledb
+    sslmode: verify-full
+    secretRef:
+      name: timescaledb-data-reader-user.timescale-demo.credentials.postgresql.acid.zalan.do
+      usernameKey: username
+      passwordKey: password
+    sslRootCertSecretRef:
+      name: timescale-demo-ca
+      key: ca.crt
+    allowedGroups:
+      - giantswarm-admins
+
+gatewayAPI:
+  enabled: true
+  httpRoute:
+    parentRefs:
+      - name: giantswarm-default
+        namespace: envoy-gateway-system
+    hostnames:
+      - mcp-timescale.example.test
+  backendTrafficPolicy:
+    enabled: true
