@@ -1,6 +1,6 @@
 # Custom targets — extends the devctl-generated Makefile.gen.*.mk.
 
-NAME ?= mcp-template
+NAME ?= mcp-timescale
 CHART_DIR ?= ./helm/$(NAME)
 
 ##@ Develop

@@ -1,4 +1,4 @@
-module github.com/giantswarm/mcp-template
+module github.com/giantswarm/mcp-timescale
 
 go 1.26.0
 

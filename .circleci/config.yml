@@ -6,8 +6,8 @@ workflows:
   build:
     jobs:
       - architect/go-build:
-          name: go-build-{MCP-NAME}
-          binary: "{MCP-NAME}"
+          name: go-build-mcp-timescale
+          binary: "mcp-timescale"
           # Picks up the root main.go (./).
           filters:
             tags:
@@ -19,7 +19,7 @@ workflows:
           name: push-to-registries
           platforms: "linux/amd64"
           requires:
-            - go-build-{MCP-NAME}
+            - go-build-mcp-timescale
           filters:
             branches:
               ignore:
@@ -31,7 +31,7 @@ workflows:
           name: push-to-gsoci-release
           registries-data: "public gsoci.azurecr.io ACR_GSOCI_USERNAME ACR_GSOCI_PASSWORD true"
           requires:
-            - go-build-{MCP-NAME}
+            - go-build-mcp-timescale
           filters:
             tags:
               only: /^v.*/
@@ -43,7 +43,7 @@ workflows:
           context: architect
           name: push-to-all-registries-release
           requires:
-            - go-build-{MCP-NAME}
+            - go-build-mcp-timescale
           filters:
             tags:
               only: /^v.*/
@@ -53,15 +53,15 @@ workflows:
       - architect/push-to-app-catalog:
           executor: app-build-suite
           context: architect
-          name: build-{MCP-NAME}-chart
+          name: build-mcp-timescale-chart
           app_catalog: giantswarm-catalog
           app_catalog_test: giantswarm-test-catalog
-          chart: "{MCP-NAME}"
+          chart: "mcp-timescale"
           push_to_appcatalog: false
           push_to_oci_registry: false
           persist_chart_archive: true
           requires:
-            - go-build-{MCP-NAME}
+            - go-build-mcp-timescale
           filters:
             tags:
               only: /^v.*/
@@ -72,7 +72,7 @@ workflows:
       - architect/run-tests-with-ats:
           name: execute chart tests
           requires:
-            - build-{MCP-NAME}-chart
+            - build-mcp-timescale-chart
           filters:
             tags:
               only: /^v.*/
@@ -84,10 +84,10 @@ workflows:
       - architect/push-to-app-catalog:
           executor: app-build-suite
           context: architect
-          name: push-{MCP-NAME}-to-giantswarm-app-catalog
+          name: push-mcp-timescale-to-giantswarm-app-catalog
           app_catalog: giantswarm-catalog
           app_catalog_test: giantswarm-test-catalog
-          chart: "{MCP-NAME}"
+          chart: "mcp-timescale"
           requires:
             - execute chart tests
             - push-to-registries
@@ -100,10 +100,10 @@ workflows:
       - architect/push-to-app-catalog:
           executor: app-build-suite
           context: architect
-          name: push-{MCP-NAME}-to-giantswarm-app-catalog-release
+          name: push-mcp-timescale-to-giantswarm-app-catalog-release
           app_catalog: giantswarm-catalog
           app_catalog_test: giantswarm-test-catalog
-          chart: "{MCP-NAME}"
+          chart: "mcp-timescale"
           requires:
             - execute chart tests
             - push-to-gsoci-release

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/giantswarm/mcp-template/cmd"
+	"github.com/giantswarm/mcp-timescale/cmd"
 )
 
 func main() {

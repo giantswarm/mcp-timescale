@@ -19,9 +19,9 @@ import (
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 
-	"github.com/giantswarm/mcp-template/internal/example"
-	"github.com/giantswarm/mcp-template/internal/server"
-	"github.com/giantswarm/mcp-template/internal/tools"
+	"github.com/giantswarm/mcp-timescale/internal/timescale"
+	"github.com/giantswarm/mcp-timescale/internal/server"
+	"github.com/giantswarm/mcp-timescale/internal/tools"
 )
 
 var (
@@ -87,7 +87,7 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}()
 	}
 
-	exClient := example.NewFakeClient()
+	exClient := timescale.NewFakeClient()
 
 	mcp := mcpsrv.NewMCPServer(
 		serviceName, version,

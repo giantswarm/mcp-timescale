@@ -1,11 +1,11 @@
 apiVersion: v2
-name: "{MCP-NAME}"
-description: SHORT_DESC_PLACEHOLDER
+name: "mcp-timescale"
+description: Read-only MCP server for TimescaleDB and PostgreSQL databases, acting on the caller identity
 type: application
 version: 0.0.0
 appVersion: "0.0.0"
 kubeVersion: ">=1.27.0-0"
-home: https://github.com/giantswarm/{MCP-NAME}
+home: https://github.com/giantswarm/mcp-timescale
 maintainers:
   - name: Giant Swarm
     url: https://giantswarm.io
@@ -14,4 +14,4 @@ annotations:
   io.giantswarm.application.audience: giantswarm
   # 'true' if Giant Swarm takes responsibility for this app where deployed.
   io.giantswarm.application.managed: "true"
-  io.giantswarm.application.team: team-PLACEHOLDER
+  io.giantswarm.application.team: team-bumblebee

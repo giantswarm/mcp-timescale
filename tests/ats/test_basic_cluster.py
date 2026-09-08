@@ -1,4 +1,4 @@
-"""Smoke test for the {MCP-NAME} chart deployed via ATS.
+"""Smoke test for the mcp-timescale chart deployed via ATS.
 
 Asserts the cluster is reachable and the deployment reaches readyReplicas
 == replicas. Add functional tests (e.g. a /healthz probe through the
@@ -15,8 +15,8 @@ from pytest_helm_charts.k8s.deployment import wait_for_deployments_to_run
 
 logger = logging.getLogger(__name__)
 
-deployment_name = "mcp-template"
-namespace_name = "mcp-template"
+deployment_name = "mcp-timescale"
+namespace_name = "mcp-timescale"
 
 timeout: int = 560
 
