@@ -10,12 +10,12 @@ import (
 )
 
 // version, commit, and date are injected at build time via
-// -ldflags="-X github.com/giantswarm/mcp-template/cmd.version=<ver>".
+// -ldflags="-X github.com/giantswarm/mcp-timescale/cmd.version=<ver>".
 // serviceName is the OTEL service.name and the MCP server identifier;
 // scripts/init.sh rewrites the default for new MCPs and ldflags can
 // override it for production builds.
 var (
-	serviceName = "mcp-template"
+	serviceName = "mcp-timescale"
 	version     = "dev"
 	commit      = "none"
 	date        = "unknown"

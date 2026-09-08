@@ -1,4 +1,4 @@
-package example
+package timescale
 
 import (
 	"context"

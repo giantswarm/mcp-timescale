@@ -1,9 +1,9 @@
-# Default values for {MCP-NAME}.
+# Default values for mcp-timescale.
 # This chart ships secure-by-default: hardened SecurityContext, NetworkPolicy
 # default-deny, ServiceMonitor on, OAuth required. Override per-environment.
 
 image:
-  repository: gsoci.azurecr.io/giantswarm/{MCP-NAME}
+  repository: gsoci.azurecr.io/giantswarm/mcp-timescale
   tag: ""  # defaults to .Chart.AppVersion
   pullPolicy: IfNotPresent
 
@@ -43,7 +43,7 @@ oauth:
   # values (http://localhost, http://127.0.0.1, http://[::1]) are accepted
   # without setting allowInsecureHTTP — see RFC 8252 §7.3.
   issuerURL: ""
-  audience: "{MCP-NAME}-audience"
+  audience: "mcp-timescale"
   scopes:
     - openid
     - email

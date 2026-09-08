@@ -1,8 +1,8 @@
-{{- define "mcp-template.name" -}}
+{{- define "mcp-timescale.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "mcp-template.fullname" -}}
+{{- define "mcp-timescale.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -15,29 +15,29 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "mcp-template.labels" -}}
-app.kubernetes.io/name: {{ include "mcp-template.name" . }}
+{{- define "mcp-timescale.labels" -}}
+app.kubernetes.io/name: {{ include "mcp-timescale.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end -}}
 
-{{- define "mcp-template.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "mcp-template.name" . }}
+{{- define "mcp-timescale.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "mcp-timescale.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "mcp-template.serviceAccountName" -}}
+{{- define "mcp-timescale.serviceAccountName" -}}
 {{- $sa := (default dict .Values.serviceAccount) -}}
 {{- if $sa.create -}}
-{{- default (include "mcp-template.fullname" .) $sa.name -}}
+{{- default (include "mcp-timescale.fullname" .) $sa.name -}}
 {{- else -}}
 {{- default "default" $sa.name -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "mcp-template.image" -}}
+{{- define "mcp-timescale.image" -}}
 {{- $tag := default .Chart.AppVersion .Values.image.tag -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end -}}

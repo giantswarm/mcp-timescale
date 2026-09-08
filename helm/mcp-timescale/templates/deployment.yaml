@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "mcp-template.fullname" . }}
-  labels: {{- include "mcp-template.labels" . | nindent 4 }}
+  name: {{ include "mcp-timescale.fullname" . }}
+  labels: {{- include "mcp-timescale.labels" . | nindent 4 }}
 spec:
 {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicas }}
 {{- end }}
   selector:
-    matchLabels: {{- include "mcp-template.selectorLabels" . | nindent 6 }}
+    matchLabels: {{- include "mcp-timescale.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "mcp-template.selectorLabels" . | nindent 8 }}
+      labels: {{- include "mcp-timescale.selectorLabels" . | nindent 8 }}
       annotations:
         # Trigger a rollout when ConfigMap changes — Helm does not do this
         # automatically.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
-      serviceAccountName: {{ include "mcp-template.serviceAccountName" . }}
+      serviceAccountName: {{ include "mcp-timescale.serviceAccountName" . }}
       securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
@@ -33,13 +33,13 @@ spec:
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
-          image: {{ include "mcp-template.image" . }}
+          image: {{ include "mcp-timescale.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["serve"]
           securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
           envFrom:
             - configMapRef:
-                name: {{ include "mcp-template.fullname" . }}
+                name: {{ include "mcp-timescale.fullname" . }}
           env:
             - name: POD_NAME
               valueFrom: {fieldRef: {fieldPath: metadata.name}}

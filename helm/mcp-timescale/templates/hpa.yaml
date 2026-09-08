@@ -2,13 +2,13 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "mcp-template.fullname" . }}
-  labels: {{- include "mcp-template.labels" . | nindent 4 }}
+  name: {{ include "mcp-timescale.fullname" . }}
+  labels: {{- include "mcp-timescale.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "mcp-template.fullname" . }}
+    name: {{ include "mcp-timescale.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

@@ -1,10 +1,10 @@
 {{ .Chart.Name }} {{ .Chart.AppVersion }} installed.
 
 MCP endpoint:
-  http://{{ include "mcp-template.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}/mcp
+  http://{{ include "mcp-timescale.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}/mcp
 
 Metrics:
-  http://{{ include "mcp-template.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.metricsPort }}/metrics
+  http://{{ include "mcp-timescale.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.metricsPort }}/metrics
 
 {{- if .Values.oauth.enabled }}
 OAuth flow:

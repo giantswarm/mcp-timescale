@@ -1,11 +1,11 @@
-[![CircleCI](https://dl.circleci.com/status-badge/img/gh/giantswarm/{MCP-NAME}/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/giantswarm/{MCP-NAME}/tree/main)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/giantswarm/mcp-timescale/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/giantswarm/mcp-timescale/tree/main)
 
-# {MCP-NAME}
+# mcp-timescale
 
-SHORT_DESC_PLACEHOLDER
+Read-only MCP server for TimescaleDB and PostgreSQL databases, acting on the caller identity
 
 This repo was bootstrapped from
-[`giantswarm/mcp-template`](https://github.com/giantswarm/mcp-template) — a
+[`giantswarm/mcp-timescale`](https://github.com/giantswarm/mcp-timescale) — a
 template for Go MCP servers built on
 [`mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go),
 [`giantswarm/mcp-oauth`](https://github.com/giantswarm/mcp-oauth), and
@@ -27,8 +27,8 @@ If you just clicked **Use this template** and cloned the result, run:
   --port=8080
 ```
 
-This rewrites every `{MCP-NAME}` / `mcp-template` / `internal/example` /
-`team-PLACEHOLDER` / `SHORT_DESC_PLACEHOLDER` placeholder, deletes itself
+This rewrites every `mcp-timescale` / `mcp-timescale` / `internal/timescale` /
+`team-bumblebee` / `Read-only MCP server for TimescaleDB and PostgreSQL databases, acting on the caller identity` placeholder, deletes itself
 plus the bootstrap-gate workflow, and runs `go mod tidy`. Commit the
 result.
 
@@ -51,8 +51,8 @@ configured — see `docs/ARCHITECTURE.md`.
 | `main.go` + `cmd/`  | cobra entry — `serve.go` wires everything top-to-bottom                |
 | `internal/server/`  | template-specific wiring: config, OAuth, transport mux, /metrics       |
 | `internal/tools/`   | example tools (`things_list`, `things_get`, `things_create`)           |
-| `internal/example/` | placeholder domain client + fake — replace with your upstream          |
-| `helm/{MCP-NAME}/`  | Helm chart (ServiceMonitor, NetworkPolicy, hardened SC)                |
+| `internal/timescale/` | placeholder domain client + fake — replace with your upstream          |
+| `helm/mcp-timescale/`  | Helm chart (ServiceMonitor, NetworkPolicy, hardened SC)                |
 | `docs/`             | architecture                                                           |
 
 Cross-cutting plumbing (slog factory, OTEL init, /healthz + /readyz,

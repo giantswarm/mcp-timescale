@@ -8,7 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 
-	"github.com/giantswarm/mcp-template/internal/server"
+	"github.com/giantswarm/mcp-timescale/internal/server"
 )
 
 // writeGroup is the Dex / OIDC group claim tools demand for write

@@ -8,13 +8,13 @@ import (
 
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 
-	"github.com/giantswarm/mcp-template/internal/example"
+	"github.com/giantswarm/mcp-timescale/internal/timescale"
 )
 
 // Deps is the bag of dependencies tool handlers need. Keep it small:
 // adding a field here means every tool gets to see it, so the bar is high.
 type Deps struct {
-	Client example.Client
+	Client timescale.Client
 	Log    *slog.Logger
 }
 

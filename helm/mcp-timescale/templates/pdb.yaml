@@ -2,10 +2,10 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "mcp-template.fullname" . }}
-  labels: {{- include "mcp-template.labels" . | nindent 4 }}
+  name: {{ include "mcp-timescale.fullname" . }}
+  labels: {{- include "mcp-timescale.labels" . | nindent 4 }}
 spec:
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
   selector:
-    matchLabels: {{- include "mcp-template.selectorLabels" . | nindent 6 }}
+    matchLabels: {{- include "mcp-timescale.selectorLabels" . | nindent 6 }}
 {{- end }}

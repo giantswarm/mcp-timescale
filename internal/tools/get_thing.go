@@ -8,7 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 
-	"github.com/giantswarm/mcp-template/internal/example"
+	"github.com/giantswarm/mcp-timescale/internal/timescale"
 )
 
 func registerGetThing(s *mcpsrv.MCPServer, deps Deps) {
@@ -26,7 +26,7 @@ func getThingHandler(deps Deps) mcpsrv.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		t, err := deps.Client.Get(ctx, id)
-		if errors.Is(err, example.ErrNotFound) {
+		if errors.Is(err, timescale.ErrNotFound) {
 			return mcp.NewToolResultError("thing " + id + " not found"), nil
 		}
 		if err != nil {

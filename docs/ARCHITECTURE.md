@@ -6,7 +6,7 @@ Top-to-bottom on the request path.
 client (Claude Desktop / mcp-inspector / Cursor / …)
    │  bearer token
    ▼
-HTTP listener  cmd/{MCP-NAME}/serve.go
+HTTP listener  cmd/mcp-timescale/serve.go
    │
    ▼
 otelhttp wrapper  internal/server/transport.go
@@ -19,7 +19,7 @@ mux  internal/server/transport.go
  └── /sse, /message  (SSE)           mcp-oauth ValidateToken → mcp-go transport
    │
    ▼
-mcp-go server  cmd/{MCP-NAME}/serve.go
+mcp-go server  cmd/mcp-timescale/serve.go
    │  WithHTTPContextFunc(PromoteOAuthCaller)
    ▼
 tool handler  internal/tools/*.go

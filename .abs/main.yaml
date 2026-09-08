@@ -1,4 +1,4 @@
 replace-chart-version-with-git: true
 generate-metadata: true
-chart-dir: ./helm/{MCP-NAME}
+chart-dir: ./helm/mcp-timescale
 destination: ./build
