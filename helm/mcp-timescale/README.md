@@ -10,6 +10,10 @@ Read-only MCP server for TimescaleDB and PostgreSQL databases, acting on the cal
 | ---- | ------ | --- |
 | Giant Swarm |  | <https://giantswarm.io> |
 
+## Source Code
+
+* <https://github.com/giantswarm/mcp-timescale>
+
 ## Requirements
 
 Kubernetes: `>=1.27.0-0`
