@@ -1,0 +1,5 @@
+# app-test-suite configuration (generated CI runs `ats` against the built chart in kind).
+# Smoke tests live in tests/ats. Upgrade tests need a previously released chart version in
+# the catalog, which a brand-new chart does not have yet.
+skip-steps:
+  - upgrade
