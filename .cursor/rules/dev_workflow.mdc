@@ -1,0 +1,50 @@
+---
+description: The development workflow for mcp-timescale
+globs: **/*
+alwaysApply: true
+---
+# The Development Workflow
+
+This repository uses `main` as the default branch. Never commit to `main`:
+branch from an up-to-date `main`, open a PR, let CI decide.
+
+## The loop
+
+1. **Plan.** Read `docs/ARCHITECTURE.md` and `.cursor/rules/architecture.mdc`;
+   check the open PRs so the change does not cross someone else's.
+2. **Implement** on a feature branch. Keep `ReadOnlyTools`, the README tool
+   table and the tests in step when a tool changes.
+3. **Verify locally** with what CI runs:
+   - `make test` (unit), `make test-integration` (Docker TimescaleDB),
+     `make lint`, `make fmt`;
+   - `pre-commit run --all-files` — gofmt, goimports (`-local
+     github.com/giantswarm/mcp-timescale`), golangci-lint with gosec/goconst,
+     `go mod tidy`, the values schema (`helm schema` → `schemalint`), helm-docs;
+   - `make helm-lint`, `make helm-template`, `make helm-test` for chart changes;
+   - `make govulncheck` when dependencies move.
+4. **PR** with a Conventional Commit title (`feat:`, `fix:`, `chore:`, `docs:`,
+   `feat!:` for a breaking change) — the title becomes the release note.
+   Required checks: PR title, pre-commit, values schema, and the CircleCI
+   `go-build`, `push-to-registries`, `build-chart`, `execute-chart-tests`.
+5. **Release** happens on merge: the Auto Release workflow tags `main`
+   (git-cliff decides the bump from the commit type; `docs:` releases nothing),
+   and the CircleCI tag pipeline publishes the six platform binaries with their
+   cosign bundles, the multi-arch image and the chart.
+
+## Generated files
+
+`.circleci/*`, `Makefile`, `Makefile.gen.*.mk`, `.pre-commit-config.yaml`,
+`renovate.json5`, `cliff.toml`, `.nancy-ignore.generated` and every
+`zz_generated.*` file are written by devctl from the team file in
+giantswarm/github (`repositories/team-bumblebee.yaml`) and kept in sync by the
+align-files workflow. Change them there, never here; repo-specific
+configuration goes to `Makefile.custom.mk`, `.circleci/custom.yml`,
+`renovate-custom.json5`.
+
+## Versioning
+
+`pkg/project` is the only version source: the generated Makefile and the
+architect `go-build` job stamp `version`, `gitSHA` and `buildTimestamp` with
+`-ldflags -X`; a plain `go build` falls back to Go's VCS build info. Do not
+add version variables elsewhere — `mcp-timescale version`, `--version`,
+the MCP server info and `self-update` all read `rootCmd.Version`.

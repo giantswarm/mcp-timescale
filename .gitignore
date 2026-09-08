@@ -1,9 +1,38 @@
+# Binary output (the generated Makefile builds ./mcp-timescale-v<ver>-<os>-<arch>)
+/mcp-timescale
+/mcp-timescale-*
 bin/
 dist/
 tmp/
-coverage.out
+
+# Scratch files the architect CI writes next to the sources (.ldflags from
+# go-test, .platforms from go-build) and the generated Makefile's package dir.
+# Untracked they flip Go's VCS stamp to vcs.modified=true and pkg/project's
+# build-info fallback reports vX.Y.Z+dirty.
+.ldflags
+.platforms
+/bin-dist/
+
+# Go
 *.test
 *.out
+coverage.out
+coverage.txt
+coverage.html
+go.work
+go.work.sum
+
+# Editors and OS
 .idea/
 .vscode/
 .DS_Store
+
+# Local MCP client configs and cursor rules
+.cursor/mcp.json
+.cursor/rules/*.local.mdc
+
+# app-test-suite results
+tests/ats/*.xml
+
+# graphify knowledge graph (regenerable)
+graphify-out/

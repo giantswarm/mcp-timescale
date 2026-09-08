@@ -9,15 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Adopt `github.com/giantswarm/mcp-toolkit` v0.1.0 for cross-cutting plumbing. `cmd/serve.go` now imports `logging.New`, `tracing.Init`, `health.New`, `httpx.Run`, `responsecap.New`, and `timeout.New` instead of carrying inline copies. Per-tool middleware (`responsecap` with default 128 KiB cap, `timeout` with 30s default) is wired from day one so every MCP scaffolded from this template inherits both protections.
+- `mcp-timescale self-update` installs the latest GitHub release only after its cosign Sigstore bundle verifies for a CircleCI build of giantswarm/mcp-timescale (`github.com/giantswarm/selfupdate-cosign`); a release without a bundle or a download that does not match its signature is refused and the installed binary stays as it is.
+- `pkg/project` carries the build identifiers the generated Makefile and the architect `go-build` job stamp at link time; `mcp-timescale version` and `--version` print the release version (plus commit and build time) instead of `dev`.
+- Running the binary without a subcommand starts the server, same as `serve`.
+- `tools.ReadOnlyTools` names the single tool class; `TestEveryToolIsReadOnlyAndStrict` compares it with the registered tools and their annotations, and the server logs its write policy (`readOnly=true writeMode=none`) at startup.
+- Chart unit tests (`make helm-test`), `make govulncheck`, `make test-vet`, `.golangci.yml` goconst tuning, `.helmignore` and repo cursor rules — the same developer surface as mcp-kubernetes.
 
 ### Changed
 
-- Bump `github.com/giantswarm/mcp-oauth` to v1.0.0.
-- Bump `github.com/mark3labs/mcp-go` v0.49.0 → v0.52.0 to align with the rest of the Giant Swarm Go MCP fleet.
-- `Config` no longer carries a `LogFormat` field. Format is auto-selected by `mcp-toolkit/logging` (JSON when `KUBERNETES_SERVICE_HOST` is set, text otherwise). The `LOG_FORMAT` env-var override is dropped — override at the call site in `cmd/serve.go` if a specific MCP needs a fixed format.
+- Release binaries for linux, darwin and windows on amd64 and arm64 are attached to every GitHub Release next to their signature bundles (generated CI `cli` flavour).
 
-### Removed
+## [0.2.0] - 2026-09-08
 
-- `internal/server/{health,logging,tracing}.go` — superseded by `mcp-toolkit/{health,logging,tracing}`.
-- `Auth.IssuerHealthURL()` and the matching `oauth-issuer` readiness probe. The toolkit's `health` package follows the principle that `/readyz` should not probe shared downstreams: a transient Dex hiccup would otherwise flip every replica's `/readyz` simultaneously and the Service yanks its last endpoint. Token validation failures continue to surface to individual callers as 401/503.
+### Added
+
+- Read-only TimescaleDB / PostgreSQL MCP server acting on the caller identity: catalog tools (databases, schemas, tables, hypertables, chunks, continuous aggregates, jobs), guarded `timescale_query`, `timescale_explain` and `timescale_sample_rows`, per-database `allowedGroups` / `allowedUsers`, attribution through `application_name`, one audit line per call, and a Helm chart with hardened defaults, OAuth (mcp-oauth, forwarded tokens) and a Gateway API route.

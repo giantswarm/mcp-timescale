@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -131,8 +133,18 @@ func TestEveryToolIsReadOnlyAndStrict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 12 {
-		t.Fatalf("got %d tools, want 12", len(res.Tools))
+	// The registered set is exactly the classification: a new tool joins
+	// ReadOnlyTools (and the README table) before it ships, and nothing in
+	// the list may silently stop being registered.
+	got := make([]string, 0, len(res.Tools))
+	for _, tool := range res.Tools {
+		got = append(got, tool.Name)
+	}
+	want := append([]string(nil), ReadOnlyTools...)
+	sort.Strings(got)
+	sort.Strings(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("registered tools %v\n  want ReadOnlyTools %v", got, want)
 	}
 	for _, tool := range res.Tools {
 		a := tool.Annotations
