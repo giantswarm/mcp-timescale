@@ -26,10 +26,7 @@ Kubernetes: `>=1.27.0-0`
 | image.tag | string | `""` | Image tag; defaults to .Chart.AppVersion. |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy. |
 | replicas | int | `1` | Replica count. One is enough with forwarded tokens (no OAuth state is shared); for more than one replica with interactive logins set storage.kind to valkey. |
-| resources.requests.cpu | string | `"100m"` |  |
-| resources.requests.memory | string | `"128Mi"` |  |
-| resources.limits.cpu | string | `"500m"` |  |
-| resources.limits.memory | string | `"512Mi"` |  |
+| resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Container resources. requests and limits take any resource name, so a cluster policy that wants ephemeral-storage on pods with an emptyDir (the server's /tmp) can be satisfied from values (e.g. Kyverno's require-emptydir-requests-and-limits). |
 | service.type | string | `"ClusterIP"` |  |
 | service.port | int | `8080` |  |
 | service.metricsPort | int | `9091` |  |
