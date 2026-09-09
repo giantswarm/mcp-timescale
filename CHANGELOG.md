@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Chart: `resources.requests` and `resources.limits` accept any resource name, not only `cpu` and `memory`, so `ephemeral-storage` can be set for the server's emptyDir `/tmp` where a cluster policy requires it (Kyverno `require-emptydir-requests-and-limits`).
+
 - `oauth.allowPrivateURLs` / `OAUTH_ALLOW_PRIVATE_URLS` (alias `MCP_OAUTH_ALLOW_PRIVATE_URLS`): the Dex issuer and its JWKS endpoint may resolve to private or loopback addresses, for a management cluster whose Dex sits behind an internal-only load balancer. Lifts mcp-oauth's SSRF guard for those two endpoints only; TLS verification stays on. Off by default, and off renders and behaves exactly as before (#14).
 - `mcp-timescale self-update` installs the latest GitHub release only after its cosign Sigstore bundle verifies for a CircleCI build of giantswarm/mcp-timescale (`github.com/giantswarm/selfupdate-cosign`); a release without a bundle or a download that does not match its signature is refused and the installed binary stays as it is.
 - `pkg/project` carries the build identifiers the generated Makefile and the architect `go-build` job stamp at link time; `mcp-timescale version` and `--version` print the release version (plus commit and build time) instead of `dev`.
