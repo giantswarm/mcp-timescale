@@ -355,11 +355,12 @@
         },
         "resources": {
             "type": "object",
+            "description": "Container resources. requests and limits take any resource name, so a cluster policy that wants ephemeral-storage on pods with an emptyDir (the server's /tmp) can be satisfied from values (e.g. Kyverno's require-emptydir-requests-and-limits).",
             "additionalProperties": false,
             "properties": {
                 "limits": {
                     "type": "object",
-                    "additionalProperties": false,
+                    "additionalProperties": true,
                     "properties": {
                         "cpu": {
                             "type": "string"
@@ -371,7 +372,7 @@
                 },
                 "requests": {
                     "type": "object",
-                    "additionalProperties": false,
+                    "additionalProperties": true,
                     "properties": {
                         "cpu": {
                             "type": "string"

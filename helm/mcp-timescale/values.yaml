@@ -17,11 +17,15 @@ image:
 # storage.kind to valkey.
 replicas: 1
 
+# -- Container resources. requests and limits take any resource name, so a
+# cluster policy that wants ephemeral-storage on pods with an emptyDir (the
+# server's /tmp) can be satisfied from values (e.g. Kyverno's
+# require-emptydir-requests-and-limits).
 resources:
-  requests:
+  requests:  # @schema additionalProperties: true
     cpu: 100m
     memory: 128Mi
-  limits:
+  limits:  # @schema additionalProperties: true
     cpu: 500m
     memory: 512Mi
 
