@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Release binaries for linux, darwin and windows on amd64 and arm64 are attached to every GitHub Release next to their signature bundles (generated CI `cli` flavour).
 
+### Fixed
+
+- `self-update` replaces the binary, symbolic links resolved, with a single rename (`selfupdatecosign.Install`, selfupdate-cosign v0.3.0). go-selfupdate's own swap moved the binary aside before it moved the new one in, so a process started in between found none, and concurrent updates could lose it. Now a process started meanwhile runs the old binary or the new one, several updates may run at once, and the binary keeps its mode.
+
 ## [0.2.0] - 2026-09-08
 
 ### Added
