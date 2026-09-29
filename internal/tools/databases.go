@@ -23,6 +23,7 @@ type databaseSummary struct {
 	StatementTimeoutSeconds int64    `json:"statement_timeout_seconds"`
 	AllowedGroups           []string `json:"allowed_groups,omitempty"`
 	AllowedUsers            []string `json:"allowed_users,omitempty"`
+	InsertTables            []string `json:"insert_tables,omitempty"`
 	timescale.ProbeResult
 }
 
@@ -65,6 +66,7 @@ func registerListDatabases(s *mcpsrv.MCPServer, deps Deps) {
 				StatementTimeoutSeconds: int64(cfg.StatementTimeout.Seconds()),
 				AllowedGroups:           cfg.AllowedGroups,
 				AllowedUsers:            cfg.AllowedUsers,
+				InsertTables:            db.InsertTables(),
 			}
 			wg.Add(1)
 			go func(i int, db *timescale.Database) {

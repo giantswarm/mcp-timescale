@@ -122,6 +122,11 @@ spec:
             - name: {{ include "mcp-timescale.trunc63" (printf "db-%s" .name) }}
               mountPath: /etc/mcp-timescale/secrets/{{ .name }}
               readOnly: true
+            {{- if .insert }}
+            - name: {{ include "mcp-timescale.trunc63" (printf "dbi-%s" .name) }}
+              mountPath: /etc/mcp-timescale/secrets/{{ .name }}-insert
+              readOnly: true
+            {{- end }}
             {{- if dig "sslRootCertSecretRef" "name" "" . }}
             - name: {{ include "mcp-timescale.trunc63" (printf "ca-%s" .name) }}
               mountPath: /etc/mcp-timescale/ca/{{ .name }}
@@ -141,6 +146,13 @@ spec:
           secret:
             secretName: {{ .secretRef.name | quote }}
             defaultMode: 0440
+        {{- if .insert }}
+        # The insert role's credentials (INSERT on insert.tables only).
+        - name: {{ include "mcp-timescale.trunc63" (printf "dbi-%s" .name) }}
+          secret:
+            secretName: {{ .insert.secretRef.name | quote }}
+            defaultMode: 0440
+        {{- end }}
         {{- if dig "sslRootCertSecretRef" "name" "" . }}
         - name: {{ include "mcp-timescale.trunc63" (printf "ca-%s" .name) }}
           secret:

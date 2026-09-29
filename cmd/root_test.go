@@ -12,7 +12,7 @@ func TestRootCmdProperties(t *testing.T) {
 	if !strings.Contains(rootCmd.Short, "Read-only") {
 		t.Errorf("Short should say the server is read-only, got %q", rootCmd.Short)
 	}
-	for _, want := range []string{"Model Context Protocol", "TimescaleDB", "READ ONLY", "no write mode"} {
+	for _, want := range []string{"Model Context Protocol", "TimescaleDB", "READ ONLY", "insert role"} {
 		if !strings.Contains(rootCmd.Long, want) {
 			t.Errorf("Long should mention %q, got:\n%s", want, rootCmd.Long)
 		}

@@ -49,7 +49,11 @@ ingress:
 # role). Optional keys: description, port (5432), sslmode (require),
 # sslRootCertSecretRef {name, key} for verify-ca/verify-full, allowedGroups,
 # allowedUsers (empty = every authenticated caller), maxRows (500, max 5000),
-# statementTimeout (30s), maxConnections (4).
+# statementTimeout (30s), maxConnections (4), insert {tables: [schema.table],
+# secretRef {name, usernameKey, passwordKey}, host, port} to enable
+# timescale_insert_row on the listed tables through a role that may only INSERT
+# into them (host and port default to the database's, set host to the primary
+# when the reads go to a replica).
 databases: []
 # databases:
 #   - name: demo
@@ -67,6 +71,11 @@ databases: []
 #     maxRows: 500
 #     statementTimeout: 30s
 #     maxConnections: 4
+#     insert:
+#       host: timescale-demo.timescale-demo.svc.cluster.local
+#       tables: [data.annotations]
+#       secretRef:
+#         name: timescaledb-annotation-writer.timescale-demo.credentials.postgresql.acid.zalan.do
 
 # OAuth gates the /mcp endpoint. Disable only for stdio-only deployments.
 # Every knob below maps to an OAUTH_* env var consumed by mcp-oauth's

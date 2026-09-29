@@ -1,7 +1,8 @@
 {{- /*
 databases.yaml as the server reads it (internal/config). Credentials are
 never in this ConfigMap: every entry points at files from the Secret the
-deployment mounts under /etc/mcp-timescale/secrets/<name>/.
+deployment mounts under /etc/mcp-timescale/secrets/<name>/ (the insert
+role's under /etc/mcp-timescale/secrets/<name>-insert/).
 */ -}}
 {{- $dbs := list -}}
 {{- range .Values.databases }}
@@ -24,6 +25,17 @@ deployment mounts under /etc/mcp-timescale/secrets/<name>/.
 {{- with .maxConnections }}{{ $_ := set $entry "maxConnections" . }}{{ end -}}
 {{- if dig "sslRootCertSecretRef" "name" "" . }}
 {{- $_ := set $entry "sslRootCertFile" (printf "/etc/mcp-timescale/ca/%s/%s" $name (default "ca.crt" .sslRootCertSecretRef.key)) }}
+{{- end -}}
+{{- with .insert }}
+{{- $isecret := required (printf "databases[%s].insert.secretRef.name is required" $name) (dig "secretRef" "name" "" .) -}}
+{{- $insert := dict
+  "tables" (required (printf "databases[%s].insert.tables is required" $name) .tables)
+  "usernameFile" (printf "/etc/mcp-timescale/secrets/%s-insert/%s" $name (default "username" .secretRef.usernameKey))
+  "passwordFile" (printf "/etc/mcp-timescale/secrets/%s-insert/%s" $name (default "password" .secretRef.passwordKey))
+-}}
+{{- with .host }}{{ $_ := set $insert "host" . }}{{ end -}}
+{{- with .port }}{{ $_ := set $insert "port" . }}{{ end -}}
+{{- $_ := set $entry "insert" $insert -}}
 {{- end -}}
 {{- $dbs = append $dbs $entry -}}
 {{- end }}

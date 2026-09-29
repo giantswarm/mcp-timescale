@@ -25,7 +25,8 @@
 //	mcp-timescale serve --transport sse --mcp-addr :8080
 //	mcp-timescale serve --transport streamable-http --mcp-addr :8080 --metrics-addr :9091
 //
-// There is no write mode: every tool is read-only by construction (see
-// internal/tools.ReadOnlyTools and docs/ARCHITECTURE.md), so the serve
-// command has no safety switch to flip.
+// There is no write mode to switch: every tool is read-only by construction
+// (see internal/tools.ReadOnlyTools and docs/ARCHITECTURE.md), except
+// timescale_insert_row, which exists only for a database that configures an
+// insert path (internal/tools.WriteTools).
 package cmd
