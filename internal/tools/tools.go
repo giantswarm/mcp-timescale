@@ -122,11 +122,12 @@ func readOnlyTool(name, description string, opts ...mcp.ToolOption) mcp.Tool {
 // databaseArg is the shared "database" argument. It is required when more
 // than one database is configured.
 func databaseArg(deps Deps) mcp.ToolOption {
-	opts := []mcp.PropertyOption{mcp.Description("Configured database name (see timescale_list_databases). Optional when exactly one database is configured.")}
 	if deps.Registry != nil && deps.Registry.Len() > 1 {
-		opts = append(opts, mcp.Required())
+		return mcp.WithString(argDatabase, mcp.Required(),
+			mcp.Description("Configured database name, required on every call (timescale_list_databases lists them)."))
 	}
-	return mcp.WithString(argDatabase, opts...)
+	return mcp.WithString(argDatabase,
+		mcp.Description("Configured database name. Optional: exactly one database is configured."))
 }
 
 // callStats is what a handler reports for the audit log.

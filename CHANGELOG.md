@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `timescale_query` and `timescale_explain` accept `CASE ... THEN f(x) END`: an `END` right after a closing parenthesis closed a `CASE`, but the guard read it as the start of a transaction-control statement and refused the query.
+- The `database` argument's description says it is required when more than one database is configured, matching the schema; it said "optional when exactly one database is configured" in both cases, and models left it out.
+
 ### Added
 
 - Chart: `resources.requests` and `resources.limits` accept any resource name, not only `cpu` and `memory`, so `ephemeral-storage` can be set for the server's emptyDir `/tmp` where a cluster policy requires it (Kyverno `require-emptydir-requests-and-limits`).
