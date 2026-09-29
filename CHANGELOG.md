@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `timescale_query` and `timescale_explain` accept `CASE ... THEN f(x) END`: an `END` right after a closing parenthesis closed a `CASE`, but the guard read it as the start of a transaction-control statement and refused the query.
+- The `database` argument's description says it is required when more than one database is configured, matching the schema; it said "optional when exactly one database is configured" in both cases, and models left it out.
+
 ### Added
 
 - `timescale_insert_row`: a database entry's optional `insert` block (tables, own credentials, host and port defaulting to the database's) lets agents insert one row at a time into the listed tables, for records such as cases or annotations. Registered only when a database configures it; the insert role should hold INSERT on those tables and nothing else. Values go in as one JSON bind parameter (`json_populate_record`), identifiers are allowlisted and validated. Chart: `databases[].insert` with its own `secretRef`, mounted next to the reader Secret.

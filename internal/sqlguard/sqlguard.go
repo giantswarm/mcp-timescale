@@ -257,6 +257,11 @@ func scan(toks []token) error {
 		if i > 0 {
 			prev = toks[i-1]
 		}
+		// END after ")" closes a CASE whose branch ends in a call or
+		// subquery (THEN round(x) END); no statement can begin with it there.
+		if t.text == "end" && prev.kind == tokPunct && prev.text == ")" {
+			continue
+		}
 		if isStatementPosition(prev, next, depth) {
 			return reject("%s is not allowed in a read-only statement (double-quote the word if it is a column name)", strings.ToUpper(t.text))
 		}
