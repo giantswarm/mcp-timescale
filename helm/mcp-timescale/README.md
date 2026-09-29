@@ -35,7 +35,7 @@ Kubernetes: `>=1.27.0-0`
 | ingress.host | string | `""` |  |
 | ingress.tls.enabled | bool | `false` |  |
 | ingress.tls.secretName | string | `""` |  |
-| databases | list | `[]` | Databases the server may connect to. Each entry becomes one database in databases.yaml; credentials come from a Secret mounted read-only (for a Zalando postgres-operator cluster that is the <role>.<cluster>.credentials.postgresql.acid.zalan.do Secret of a reader role). Optional keys: description, port (5432), sslmode (require), sslRootCertSecretRef {name, key} for verify-ca/verify-full, allowedGroups, allowedUsers (empty = every authenticated caller), maxRows (500, max 5000), statementTimeout (30s), maxConnections (4). |
+| databases | list | `[]` | Databases the server may connect to. Each entry becomes one database in databases.yaml; credentials come from a Secret mounted read-only (for a Zalando postgres-operator cluster that is the <role>.<cluster>.credentials.postgresql.acid.zalan.do Secret of a reader role). Optional keys: description, port (5432), sslmode (require), sslRootCertSecretRef {name, key} for verify-ca/verify-full, allowedGroups, allowedUsers (empty = every authenticated caller), maxRows (500, max 5000), statementTimeout (30s), maxConnections (4), insert {tables: [schema.table], secretRef {name, usernameKey, passwordKey}, host, port} to enable timescale_insert_row on the listed tables through a role that may only INSERT into them (host and port default to the database's, set host to the primary when the reads go to a replica). |
 | oauth.enabled | bool | `true` |  |
 | oauth.provider | string | `"dex"` |  |
 | oauth.issuerURL | string | `""` |  |

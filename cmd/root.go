@@ -23,7 +23,9 @@ var rootCmd = &cobra.Command{
 read-only access to TimescaleDB and PostgreSQL databases: the catalog (schemas,
 tables, hypertables, chunks, continuous aggregates, background jobs) and a
 guarded SELECT surface. Every call runs as the person behind it, inside a
-READ ONLY transaction on a read-only role; there is no write mode.
+READ ONLY transaction on a read-only role. The one write, inserting rows into
+allowlisted tables through a separate insert role, exists only for databases
+that configure it.
 
 When run without a subcommand it starts the server (same as 'mcp-timescale serve').`,
 	// Cobra would otherwise print the usage text after every handled error.

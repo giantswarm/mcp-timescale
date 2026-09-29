@@ -45,6 +45,7 @@ const (
 
 var (
 	nameRe    = regexp.MustCompile(`^[a-z0-9-]{1,63}$`)
+	tableRe   = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$`)
 	sslModes  = []string{"disable", "require", "verify-ca", "verify-full"}
 	errNoName = errors.New("name is required")
 )
@@ -77,12 +78,35 @@ type Database struct {
 	StatementTimeout time.Duration `yaml:"statementTimeout"`
 	MaxConnections   int           `yaml:"maxConnections"`
 
+	// Insert, when set, enables timescale_insert_row on this database: rows
+	// go into the listed tables only, through their own role and host.
+	Insert *Insert `yaml:"insert"`
+
 	// DSN is set for the MCP_TIMESCALE_DSN shortcut only. When non-empty
 	// it carries the whole connection configuration including credentials
 	// and Host/Port/DBName are informational.
 	DSN string `yaml:"-"`
 	// User and Password are the resolved credentials (from Username /
 	// UsernameFile and PasswordFile / PasswordEnv).
+	User     string `yaml:"-"`
+	Password string `yaml:"-"`
+}
+
+// Insert is the opt-in write path of a database. It connects with its own
+// credentials (a role that may only INSERT into Tables) and, when Host is
+// set, to another host (the primary when the reads go to a replica).
+type Insert struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+
+	Username     string `yaml:"username"`
+	UsernameFile string `yaml:"usernameFile"`
+	PasswordFile string `yaml:"passwordFile"`
+	PasswordEnv  string `yaml:"passwordEnv"`
+
+	// Tables are the schema-qualified tables rows may be inserted into.
+	Tables []string `yaml:"tables"`
+
 	User     string `yaml:"-"`
 	Password string `yaml:"-"`
 }
@@ -259,47 +283,94 @@ func (d *Database) validateAndResolve() error {
 		}
 	}
 
-	switch {
-	case d.Username != "" && d.UsernameFile != "":
-		return errors.New("set either username or usernameFile, not both")
-	case d.Username != "":
-		d.User = d.Username
-	case d.UsernameFile != "":
-		v, err := readSecretFile(d.UsernameFile)
-		if err != nil {
-			return fmt.Errorf("usernameFile: %w", err)
+	user, password, err := resolveCredentials(d.Username, d.UsernameFile, d.PasswordFile, d.PasswordEnv)
+	if err != nil {
+		return err
+	}
+	d.User, d.Password = user, password
+
+	if d.Insert != nil {
+		if err := d.Insert.validateAndResolve(d); err != nil {
+			return fmt.Errorf("insert: %w", err)
 		}
-		d.User = v
+	}
+	return nil
+}
+
+// validateAndResolve applies the parent's host and port as defaults, checks
+// the table list and reads the insert role's credentials. There is no
+// fallback to the parent's (read-only) credentials.
+func (in *Insert) validateAndResolve(parent *Database) error {
+	if in.Host == "" {
+		in.Host = parent.Host
+	}
+	if in.Port == 0 {
+		in.Port = parent.Port
+	}
+	if in.Port < 1 || in.Port > 65535 {
+		return fmt.Errorf("port %d is out of range", in.Port)
+	}
+	if len(in.Tables) == 0 {
+		return errors.New("tables is required")
+	}
+	for _, t := range in.Tables {
+		if !tableRe.MatchString(t) {
+			return fmt.Errorf("table %q must be schema-qualified lower-case identifiers (%s)", t, tableRe.String())
+		}
+	}
+	user, password, err := resolveCredentials(in.Username, in.UsernameFile, in.PasswordFile, in.PasswordEnv)
+	if err != nil {
+		return err
+	}
+	in.User, in.Password = user, password
+	return nil
+}
+
+// resolveCredentials reads a username (inline or from a file) and a password
+// (from a file or an environment variable).
+func resolveCredentials(username, usernameFile, passwordFile, passwordEnv string) (string, string, error) {
+	var user, password string
+	switch {
+	case username != "" && usernameFile != "":
+		return "", "", errors.New("set either username or usernameFile, not both")
+	case username != "":
+		user = username
+	case usernameFile != "":
+		v, err := readSecretFile(usernameFile)
+		if err != nil {
+			return "", "", fmt.Errorf("usernameFile: %w", err)
+		}
+		user = v
 	default:
-		return errors.New("username or usernameFile is required")
+		return "", "", errors.New("username or usernameFile is required")
 	}
 
 	switch {
-	case d.PasswordFile != "" && d.PasswordEnv != "":
-		return errors.New("set either passwordFile or passwordEnv, not both")
-	case d.PasswordFile != "":
-		v, err := readSecretFile(d.PasswordFile)
+	case passwordFile != "" && passwordEnv != "":
+		return "", "", errors.New("set either passwordFile or passwordEnv, not both")
+	case passwordFile != "":
+		v, err := readSecretFile(passwordFile)
 		if err != nil {
-			return fmt.Errorf("passwordFile: %w", err)
+			return "", "", fmt.Errorf("passwordFile: %w", err)
 		}
-		d.Password = v
-	case d.PasswordEnv != "":
-		v, ok := os.LookupEnv(d.PasswordEnv)
+		password = v
+	case passwordEnv != "":
+		v, ok := os.LookupEnv(passwordEnv)
 		if !ok {
-			return fmt.Errorf("passwordEnv: %s is not set", d.PasswordEnv)
+			return "", "", fmt.Errorf("passwordEnv: %s is not set", passwordEnv)
 		}
-		d.Password = v
+		password = v
 	default:
-		return errors.New("passwordFile or passwordEnv is required")
+		return "", "", errors.New("passwordFile or passwordEnv is required")
 	}
-	return nil
+	return user, password, nil
 }
 
 // validateDSNOnly rejects fields that make no sense next to a DSN.
 func (d *Database) validateDSNOnly() error {
 	if d.Host != "" || d.Port != 0 || d.DBName != "" || d.Username != "" || d.UsernameFile != "" ||
-		d.PasswordFile != "" || d.PasswordEnv != "" || d.SSLMode != "" || d.SSLRootCertFile != "" {
-		return errors.New("a DSN database takes no host/port/dbname/ssl/credential fields")
+		d.PasswordFile != "" || d.PasswordEnv != "" || d.SSLMode != "" || d.SSLRootCertFile != "" || d.Insert != nil {
+		return errors.New("a DSN database takes no host/port/dbname/ssl/credential/insert fields")
 	}
 	return nil
 }

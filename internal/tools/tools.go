@@ -1,5 +1,5 @@
-// Package tools wires the MCP tools this server exposes. Every tool is
-// read-only, resolves the caller's identity first (and refuses anonymous
+// Package tools wires the MCP tools this server exposes. Every tool but the
+// opt-in timescale_insert_row is read-only; every tool resolves the caller's identity first (and refuses anonymous
 // calls), checks the per-database allowlist, validates its arguments
 // strictly and returns one JSON document as text content.
 package tools
@@ -30,7 +30,8 @@ timescale_describe_table for columns, the time dimension, chunk interval, compre
 Listings are ordered by schema and name and paged (limit, offset); they carry sizes only for small pages unless include_sizes is set.
 Use timescale_query for analysis: time_bucket('1 hour', <time column>) with aggregates over a bounded WHERE <time column> > now() - interval '...' range
 is the idiomatic TimescaleDB shape; prefer continuous aggregates (timescale_list_continuous_aggregates) for long ranges.
-Every statement runs in a READ ONLY transaction, is capped by max_rows and a statement timeout, and is attributed to you via application_name.`
+Every statement runs in a READ ONLY transaction, is capped by max_rows and a statement timeout, and is attributed to you via application_name.
+When a database has writable tables, timescale_insert_row inserts one row into them; nothing else writes.`
 
 // Argument names shared by several tools.
 const (
@@ -84,7 +85,8 @@ var ReadOnlyTools = []string{
 	"timescale_sample_rows",
 }
 
-// Register installs every tool on s and returns their names (ReadOnlyTools).
+// Register installs every tool on s and returns their names: ReadOnlyTools,
+// plus WriteTools when a database has an insert path.
 func Register(s *mcpsrv.MCPServer, deps Deps) []string {
 	if deps.Log == nil {
 		deps.Log = slog.Default()
@@ -101,7 +103,11 @@ func Register(s *mcpsrv.MCPServer, deps Deps) []string {
 	registerQuery(s, deps)
 	registerExplain(s, deps)
 	registerSampleRows(s, deps)
-	return append([]string(nil), ReadOnlyTools...)
+	names := append([]string(nil), ReadOnlyTools...)
+	if registerInsertRow(s, deps) {
+		names = append(names, WriteTools...)
+	}
+	return names
 }
 
 // readOnlyTool builds a tool with the annotations every tool here shares

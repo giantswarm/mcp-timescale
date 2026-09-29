@@ -118,3 +118,54 @@ tests:
       - equal:
           path: data.OAUTH_DEX_ISSUER_URL
           value: https://dex.example.test
+
+  - template: templates/deployment.yaml
+    it: mounts the insert role's Secret next to the reader Secret when a database has an insert path
+    set:
+      databases:
+        - name: plant
+          host: db-repl.example.svc
+          dbname: plant
+          secretRef:
+            name: plant-reader
+          insert:
+            host: db.example.svc
+            tables: [werk.cases]
+            secretRef:
+              name: plant-case-writer
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: dbi-plant
+            secret:
+              secretName: plant-case-writer
+              defaultMode: 0440
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: dbi-plant
+            mountPath: /etc/mcp-timescale/secrets/plant-insert
+            readOnly: true
+
+  - template: templates/configmap-databases.yaml
+    it: renders the insert path with file credentials, never the Secret name
+    set:
+      databases:
+        - name: plant
+          host: db-repl.example.svc
+          dbname: plant
+          secretRef:
+            name: plant-reader
+          insert:
+            host: db.example.svc
+            tables: [werk.cases]
+            secretRef:
+              name: plant-case-writer
+    asserts:
+      - matchRegex:
+          path: data["databases.yaml"]
+          pattern: "insert:\\n +host: db.example.svc\\n +passwordFile: /etc/mcp-timescale/secrets/plant-insert/password\\n +tables:\\n +- werk.cases\\n +usernameFile: /etc/mcp-timescale/secrets/plant-insert/username"
+      - notMatchRegex:
+          path: data["databases.yaml"]
+          pattern: plant-case-writer

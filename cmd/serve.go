@@ -127,9 +127,15 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	)
 	names := tools.Register(mcp, tools.Deps{Registry: registry, Log: logger, LocalCaller: localCaller})
 	// The posture line operators grep for (mcp-capi prints the same shape):
-	// there is no write mode to switch, every tool is read-only.
-	logger.Info("Write policy", "readOnly", true, "writeMode", "none", "tools", len(names), "mutatingTools", 0,
-		"note", "every tool runs in a READ ONLY transaction on a read-only role")
+	// read-only unless a database opts into the insert path.
+	mutating := len(names) - len(tools.ReadOnlyTools)
+	if mutating == 0 {
+		logger.Info("Write policy", "readOnly", true, "writeMode", "none", "tools", len(names), "mutatingTools", 0,
+			"note", "every tool runs in a READ ONLY transaction on a read-only role")
+	} else {
+		logger.Info("Write policy", "readOnly", false, "writeMode", "insert", "tools", len(names), "mutatingTools", mutating,
+			"note", "timescale_insert_row inserts into the configured tables through each database's insert role; every other tool is read-only")
+	}
 
 	if flagTransport == server.TransportStdio {
 		logger.Info("MCP serving on stdio", "transport", server.TransportStdio)

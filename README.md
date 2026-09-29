@@ -59,13 +59,16 @@ reports Go's VCS build info (`+dirty` with untracked files), the generated
 `make build` stamps the same identifiers the CI does (`pkg/project`).
 
 There is no `--read-only` or `--non-destructive` switch as in mcp-capi or
-mcp-kubernetes: every tool is read-only by construction. `tools.ReadOnlyTools`
-is the whole tool classification, the tool test compares it with what the
-server registers and with each tool's annotations, and the server logs its
-posture at startup:
+mcp-kubernetes: every tool is read-only by construction, except
+`timescale_insert_row`, which exists only when a database configures an
+`insert` path (see [Inserting rows](#inserting-rows)). `tools.ReadOnlyTools`
+and `tools.WriteTools` are the whole tool classification, the tool tests
+compare them with what the server registers and with each tool's annotations,
+and the server logs its posture at startup:
 
 ```text
 Write policy readOnly=true writeMode=none tools=12 mutatingTools=0
+Write policy readOnly=false writeMode=insert tools=13 mutatingTools=1   # with an insert path
 ```
 
 ## Tools
@@ -90,6 +93,29 @@ configured name); it is optional when exactly one database is configured.
 | `timescale_query` | `database`, `sql`, `max_rows?` (100), `timeout_seconds?` | One `SELECT` / `WITH … SELECT` / `VALUES` / `TABLE` / `EXPLAIN` / `SHOW` statement: `{database, columns:[{name,type}], rows:[[…]], row_count, truncated, duration_ms}`. |
 | `timescale_explain` | `database`, `sql`, `analyze?` (false), `format?` (text) | `EXPLAIN (ANALYZE, BUFFERS, FORMAT …)` of a SELECT-like statement; the plan as text or parsed JSON. |
 | `timescale_sample_rows` | `database`, `schema`, `table`, `limit?` (20) | The newest rows of a table (hypertables ordered by their time dimension); identifiers are validated against the catalog first. |
+| `timescale_insert_row` | `database`, `table`, `row` | Only with an `insert` path: inserts one row (`{column: value}`) into a writable table and commits it: `{database, table, columns, inserted, duration_ms}`. Not read-only, not idempotent, not destructive. |
+
+### Inserting rows
+
+A database entry can opt into one write: inserting rows into a fixed list of
+tables, for records an agent produces (a case, an annotation, a finding).
+
+```yaml
+insert:
+  host: db-primary.example.svc   # defaults to the database host; reads may stay on a replica
+  usernameFile: /etc/mcp-timescale/secrets/plant-insert/username
+  passwordFile: /etc/mcp-timescale/secrets/plant-insert/password
+  tables: [werk.cases]
+```
+
+The insert path has its own credentials and no fallback to the reader's; give
+that role `INSERT` on the listed tables and nothing else (no `SELECT`,
+`UPDATE` or `DELETE`). The statement is built from the allowlisted table and
+validated column names only, `INSERT INTO t (cols) SELECT cols FROM
+json_populate_record(NULL::t, $1::json)`, so PostgreSQL converts the JSON
+values to the column types and every value is one bind parameter. It runs in
+its own committed transaction attributed through `application_name` like
+every read.
 
 Values are encoded for a model: timestamps as RFC 3339 strings (`timestamp`
 without zone and `date` keep their zone-less form), `numeric` as strings (no
@@ -136,7 +162,9 @@ Either way the server **acts on the caller's identity**:
   `timescale_list_databases` shows only databases the caller may use.
 - Every statement runs in a `READ ONLY` transaction on a connection whose
   session defaults are read-only, and the transaction is always rolled back.
-  The database role itself should be a reader.
+  The database role itself should be a reader. The only exception is
+  `timescale_insert_row` on a database with an `insert` path, on its own
+  connection and role.
 - The database sees the person: `application_name` is
   `mcp-timescale/<email>` for the duration of the transaction (visible in
   `pg_stat_activity` and with `%a` in `log_line_prefix`), and the server logs
