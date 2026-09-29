@@ -1,7 +1,8 @@
 // Package timescale talks to the configured TimescaleDB / PostgreSQL
-// databases. Every statement runs inside a READ ONLY transaction on a
-// connection whose session defaults are read-only as well, attributed to
-// the calling person through application_name.
+// databases. Every read runs inside a READ ONLY transaction on a connection
+// whose session defaults are read-only as well, attributed to the calling
+// person through application_name. The only write is Insert: one row into
+// an allowlisted table through the database's separate insert role.
 package timescale
 
 import (
@@ -41,14 +42,24 @@ type Registry struct {
 func NewRegistry(cfgs []config.Database) (*Registry, error) {
 	r := &Registry{dbs: make(map[string]*Database, len(cfgs))}
 	for _, c := range cfgs {
-		pc, err := poolConfig(c)
+		pc, err := poolConfig(c, true)
 		if err != nil {
 			return nil, fmt.Errorf("database %s: %w", c.Name, err)
 		}
 		if _, dup := r.dbs[c.Name]; dup {
 			return nil, fmt.Errorf("database %s is configured twice", c.Name)
 		}
-		r.dbs[c.Name] = &Database{cfg: c, poolCfg: pc}
+		db := &Database{cfg: c, poolCfg: pc}
+		if c.Insert != nil {
+			wc := c
+			wc.Host, wc.Port, wc.User, wc.Password = c.Insert.Host, c.Insert.Port, c.Insert.User, c.Insert.Password
+			wpc, err := poolConfig(wc, false)
+			if err != nil {
+				return nil, fmt.Errorf("database %s insert: %w", c.Name, err)
+			}
+			db.insert = &lazyPool{cfg: wpc}
+		}
+		r.dbs[c.Name] = db
 		r.order = append(r.order, c.Name)
 	}
 	return r, nil
@@ -87,6 +98,16 @@ func (r *Registry) MaxStatementTimeout() time.Duration {
 	return m
 }
 
+// Insertable reports whether any database has an insert path.
+func (r *Registry) Insertable() bool {
+	for _, d := range r.dbs {
+		if d.insert != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // Close closes every pool that was opened.
 func (r *Registry) Close() {
 	for _, d := range r.dbs {
@@ -94,13 +115,46 @@ func (r *Registry) Close() {
 	}
 }
 
-// Database is one configured database with a lazily opened pool.
+// Database is one configured database with a lazily opened read pool and,
+// when configured, a lazily opened insert pool.
 type Database struct {
 	cfg     config.Database
 	poolCfg *pgxpool.Config
+	insert  *lazyPool
 
 	mu   sync.Mutex
 	pool *pgxpool.Pool
+}
+
+// lazyPool opens its pool on first use.
+type lazyPool struct {
+	cfg *pgxpool.Config
+
+	mu   sync.Mutex
+	pool *pgxpool.Pool
+}
+
+func (l *lazyPool) get(ctx context.Context) (*pgxpool.Pool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.pool != nil {
+		return l.pool, nil
+	}
+	p, err := pgxpool.NewWithConfig(ctx, l.cfg)
+	if err != nil {
+		return nil, fmt.Errorf("open insert pool: %w", err)
+	}
+	l.pool = p
+	return p, nil
+}
+
+func (l *lazyPool) close() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.pool != nil {
+		l.pool.Close()
+		l.pool = nil
+	}
 }
 
 // Name returns the tool-facing database name.
@@ -113,6 +167,11 @@ func (d *Database) Config() config.Database {
 	c.Password = ""
 	c.User = ""
 	c.DSN = ""
+	if c.Insert != nil {
+		in := *c.Insert
+		in.User, in.Password = "", ""
+		c.Insert = &in
+	}
 	if d.cfg.DSN != "" {
 		// Fill the informational fields from the parsed DSN so
 		// list_databases can show where "default" points.
@@ -158,8 +217,20 @@ func (d *Database) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	return p, nil
 }
 
-// Close closes the pool if it was opened.
+// InsertTables lists the tables timescale_insert_row may write to (none
+// without an insert path).
+func (d *Database) InsertTables() []string {
+	if d.cfg.Insert == nil {
+		return nil
+	}
+	return append([]string(nil), d.cfg.Insert.Tables...)
+}
+
+// Close closes the pools that were opened.
 func (d *Database) Close() {
+	if d.insert != nil {
+		d.insert.close()
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.pool != nil {
@@ -168,9 +239,9 @@ func (d *Database) Close() {
 	}
 }
 
-// poolConfig turns a database configuration into a pgxpool configuration
-// with read-only session defaults.
-func poolConfig(c config.Database) (*pgxpool.Config, error) {
+// poolConfig turns a database configuration into a pgxpool configuration;
+// readOnly sets read-only session defaults (every pool but the insert pool).
+func poolConfig(c config.Database, readOnly bool) (*pgxpool.Config, error) {
 	var (
 		pc  *pgxpool.Config
 		err error
@@ -216,11 +287,14 @@ func poolConfig(c config.Database) (*pgxpool.Config, error) {
 		// so connection poolers that reject unknown startup parameters
 		// (PgBouncer) still work. Every tool call additionally runs inside
 		// an explicit READ ONLY transaction.
-		for _, stmt := range []string{
-			"SET default_transaction_read_only = on",
+		stmts := []string{
 			fmt.Sprintf("SET statement_timeout = %d", timeoutMS),
 			fmt.Sprintf("SET idle_in_transaction_session_timeout = %d", timeoutMS),
-		} {
+		}
+		if readOnly {
+			stmts = append(stmts, "SET default_transaction_read_only = on")
+		}
+		for _, stmt := range stmts {
 			if _, err := conn.Exec(ctx, stmt); err != nil {
 				return fmt.Errorf("session setup (%s): %w", stmt, err)
 			}
