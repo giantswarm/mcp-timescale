@@ -139,7 +139,7 @@ func requireEnv(name string) (string, error) {
 func requireSecretEnv(name string) (string, error) {
 	v := os.Getenv(name)
 	if raw := os.Getenv(name + "_FILE"); raw != "" {
-		b, err := os.ReadFile(filepath.Clean(raw))
+		b, err := os.ReadFile(filepath.Clean(raw)) // #nosec G703 -- NAME_FILE is the operator's mounted-secret path, read by design
 		if err != nil {
 			return "", fmt.Errorf("%s_FILE: %w", name, err)
 		}
