@@ -15,9 +15,14 @@ const (
 	TransportStreamableHTTP = "streamable-http"
 )
 
+// MaxBodyBytes bounds a request body. mcp-go reads a POST body whole before
+// validating it (CVE-2026-108859); the bound keeps that read small.
+const MaxBodyBytes = 1 << 20
+
 // BuildMCPMux wires the OAuth flow + discovery routes (when auth != nil) and
 // the transport-specific MCP handler, then wraps the result in otelhttp so
-// inbound W3C traceparents become server spans. transport must be SSE or
+// inbound W3C traceparents become server spans. Every request body is bounded
+// at MaxBodyBytes. transport must be SSE or
 // streamable-HTTP — stdio servers do not have an HTTP mux.
 func BuildMCPMux(transport string, mcp *mcpsrv.MCPServer, auth *Auth) http.Handler {
 	mux := http.NewServeMux()
@@ -52,7 +57,7 @@ func BuildMCPMux(transport string, mcp *mcpsrv.MCPServer, auth *Auth) http.Handl
 		mux.Handle("/message", gateWithAuth(auth, h))
 	}
 
-	return otelhttp.NewHandler(mux, "mcp",
+	return otelhttp.NewHandler(http.MaxBytesHandler(mux, MaxBodyBytes), "mcp",
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 			return r.Method + " " + r.URL.Path
 		}),

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The MCP endpoint refuses a request body larger than 1 MiB before mcp-go reads it whole (CVE-2026-108859, no fixed mcp-go release yet; the scan ignores it until 2026-11-12). ([#65](https://github.com/giantswarm/mcp-timescale/issues/65))
 - `timescale_query` and `timescale_explain` accept `CASE ... THEN f(x) END`: an `END` right after a closing parenthesis closed a `CASE`, but the guard read it as the start of a transaction-control statement and refused the query.
 - The `database` argument's description says it is required when more than one database is configured, matching the schema; it said "optional when exactly one database is configured" in both cases, and models left it out.
 
