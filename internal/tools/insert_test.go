@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/v2/mcp"
 
 	"github.com/giantswarm/mcp-timescale/internal/config"
 	"github.com/giantswarm/mcp-timescale/internal/timescale"

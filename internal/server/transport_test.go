@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpsrv "github.com/mark3labs/mcp-go/server"
+	mcpsrv "github.com/mark3labs/mcp-go/v2/server"
 )
 
 // A body beyond the bound is refused, and the endpoint keeps answering.

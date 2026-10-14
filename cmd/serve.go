@@ -16,7 +16,7 @@ import (
 	"github.com/giantswarm/mcp-toolkit/middleware/responsecap"
 	"github.com/giantswarm/mcp-toolkit/middleware/timeout"
 	"github.com/giantswarm/mcp-toolkit/tracing"
-	mcpsrv "github.com/mark3labs/mcp-go/server"
+	mcpsrv "github.com/mark3labs/mcp-go/v2/server"
 	"github.com/spf13/cobra"
 
 	"github.com/giantswarm/mcp-timescale/internal/config"

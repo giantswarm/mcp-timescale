@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/giantswarm/mcp-oauth/handler"
-	mcpsrv "github.com/mark3labs/mcp-go/server"
+	mcpsrv "github.com/mark3labs/mcp-go/v2/server"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 

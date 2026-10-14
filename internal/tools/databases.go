@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	mcpsrv "github.com/mark3labs/mcp-go/server"
+	"github.com/mark3labs/mcp-go/v2/mcp"
+	mcpsrv "github.com/mark3labs/mcp-go/v2/server"
 
 	"github.com/giantswarm/mcp-timescale/internal/server"
 	"github.com/giantswarm/mcp-timescale/internal/timescale"
