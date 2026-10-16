@@ -36,8 +36,8 @@ type listDatabasesResult struct {
 
 func registerListDatabases(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_list_databases",
-		"List the databases you may use, with reachability and PostgreSQL and TimescaleDB versions. Start here.",
-		"The other tools take one of these names as database. Databases whose allowlist excludes you are hidden (hidden_count).")
+		"List the databases you may use: each database's name, reachability and PostgreSQL and TimescaleDB versions. Start here.",
+		"The other tools take that name as database. Databases whose allowlist excludes you are hidden (hidden_count).")
 	s.AddTool(tool, deps.wrap(tool.Name, nil, func(ctx context.Context, _ mcp.CallToolRequest, caller server.Caller) (any, callStats, error) {
 		res := listDatabasesResult{Items: []databaseSummary{}, Caller: callerName(caller)}
 		if deps.Registry == nil {
@@ -82,8 +82,8 @@ func registerListDatabases(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerGetDatabaseInfo(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_get_database_info",
-		"Show one database's server facts: versions, TimescaleDB license, role, size, timezone, extensions and object counts.",
-		"License apache means no compression or continuous-aggregate policies.",
+		"Show one database's server facts: PostgreSQL and TimescaleDB version and license, role, size, timezone, extensions.",
+		"License apache means no compression or continuous-aggregate policies. Also the number of hypertables, continuous aggregates and background jobs.",
 		databaseArg(deps),
 	)
 	s.AddTool(tool, deps.wrap(tool.Name, []string{argDatabase}, func(ctx context.Context, req mcp.CallToolRequest, caller server.Caller) (any, callStats, error) {

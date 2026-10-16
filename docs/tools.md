@@ -21,9 +21,9 @@ Generated from the registered tools (`make tools-doc`), for a server with two da
 ## `timescale_describe_table`
 
 ```text
-Describe a table, view or hypertable: columns, keys, indexes and, for TimescaleDB objects, their settings and policies.
+Describe a table, view or hypertable: columns, keys, indexes; a hypertable's size, chunks, compression and policies.
 
-Also foreign keys and a view's definition. Hypertables add the time column, chunk interval, chunk count, compression settings, detailed size and retention/compression/reorder policies; continuous aggregates add the definition, source hypertable and refresh policy.
+A continuous aggregate adds its definition, source hypertable and refresh policy.
 ```
 
 ```json
@@ -55,7 +55,7 @@ Also foreign keys and a view's definition. Hypertables add the time column, chun
 ## `timescale_explain`
 
 ```text
-Show a SELECT-like statement's execution plan, to check chunk exclusion and index use.
+Show a SELECT-like statement's execution plan (EXPLAIN, optionally ANALYZE), to check chunk exclusion and index use.
 
 Runs EXPLAIN (ANALYZE <analyze>, BUFFERS <analyze>, FORMAT <format>). With analyze the statement runs (read-only) and real timings are reported. A bounded time range should scan few chunks.
 ```
@@ -103,9 +103,9 @@ Runs EXPLAIN (ANALYZE <analyze>, BUFFERS <analyze>, FORMAT <format>). With analy
 ## `timescale_get_database_info`
 
 ```text
-Show one database's server facts: versions, TimescaleDB license, role, size, timezone, extensions and object counts.
+Show one database's server facts: PostgreSQL and TimescaleDB version and license, role, size, timezone, extensions.
 
-License apache means no compression or continuous-aggregate policies.
+License apache means no compression or continuous-aggregate policies. Also the number of hypertables, continuous aggregates and background jobs.
 ```
 
 ```json
@@ -162,7 +162,7 @@ No UPDATE, DELETE or DDL, and only these tables (by database: notes: public.anno
 ## `timescale_list_chunks`
 
 ```text
-List one hypertable's chunks, newest first, with time or integer range, compression state, tablespace and size.
+List a hypertable's chunks, newest first by default: each chunk's time or integer range, compression, tablespace, size.
 ```
 
 ```json
@@ -230,9 +230,9 @@ Query them like tables for fast long-range analysis. Empty on the Apache-license
 ## `timescale_list_databases`
 
 ```text
-List the databases you may use, with reachability and PostgreSQL and TimescaleDB versions. Start here.
+List the databases you may use: each database's name, reachability and PostgreSQL and TimescaleDB versions. Start here.
 
-The other tools take one of these names as database. Databases whose allowlist excludes you are hidden (hidden_count).
+The other tools take that name as database. Databases whose allowlist excludes you are hidden (hidden_count).
 ```
 
 ```json
@@ -247,9 +247,9 @@ The other tools take one of these names as database. Databases whose allowlist e
 ## `timescale_list_hypertables`
 
 ```text
-List the hypertables with time column, chunk interval, chunk count and compression, one page at a time.
+List each hypertable with time column, chunk interval, chunk count, compression and size, one page at a time.
 
-Ordered by schema and name; hypertables that materialize a continuous aggregate are marked. total_bytes/total_size (hypertable_size: the table plus every chunk, compressed data included) come when the page holds fewer than 50 hypertables or include_sizes is true; the result says when sizes were skipped, and timescale_describe_table has one hypertable's detailed size. Errors when the timescaledb extension is not installed.
+Ordered by schema and name; hypertables that materialize a continuous aggregate are marked. total_bytes/total_size (hypertable_size: the table plus every chunk, compressed data included), computed in one pass for the page, come when it holds fewer than 50 hypertables or include_sizes is true; the result says when sizes were skipped, and timescale_describe_table has one hypertable's detailed size. Errors when the timescaledb extension is not installed.
 ```
 
 ```json
@@ -261,7 +261,7 @@ Ordered by schema and name; hypertables that materialize a continuous aggregate 
       "type": "string"
     },
     "include_sizes": {
-      "description": "Compute total_bytes and total_size. Default: true below 50 hypertables on the page. true costs time proportional to the page's chunks.",
+      "description": "Size the page in one pass (total_bytes, total_size). Default: true below 50 hypertables. true costs time proportional to the page's chunks.",
       "type": "boolean"
     },
     "limit": {
@@ -292,9 +292,9 @@ Ordered by schema and name; hypertables that materialize a continuous aggregate 
 ## `timescale_list_jobs`
 
 ```text
-List the TimescaleDB background jobs (policies and user-defined actions) with schedule, target and run statistics.
+List background jobs: each retention, compression, reorder or refresh policy, with its schedule and run statistics.
 
-Retention, compression, reorder and refresh policies, with config, last run status, next start, total runs and failures.
+Also user-defined actions.
 ```
 
 ```json
@@ -340,9 +340,9 @@ TimescaleDB-internal schemas (_timescaledb_*), which hold the chunks, are hidden
 ## `timescale_list_tables`
 
 ```text
-List tables and views with kind, owner, row estimate and comment, one page at a time, ordered by schema and name.
+List tables and views with kind, owner, row estimate, size and comment, one page at a time, ordered by schema and name.
 
-is_hypertable and is_continuous_aggregate mark TimescaleDB objects. Without schema, system and _timescaledb_* schemas are skipped. total_bytes/total_size (hypertable_size for hypertables, chunks included) come when the page holds fewer than 50 relations or include_sizes is true; the result says when sizes were skipped, and timescale_describe_table has one hypertable's detailed size.
+is_hypertable and is_continuous_aggregate mark TimescaleDB objects. Without schema, system and _timescaledb_* schemas are skipped. total_bytes/total_size (hypertable_size for hypertables, chunks included), computed in one pass for the page, come when it holds fewer than 50 relations or include_sizes is true; the result says when sizes were skipped, and timescale_describe_table has one hypertable's detailed size.
 ```
 
 ```json
@@ -354,7 +354,7 @@ is_hypertable and is_continuous_aggregate mark TimescaleDB objects. Without sche
       "type": "string"
     },
     "include_sizes": {
-      "description": "Compute total_bytes and total_size. Default: true below 50 relations on the page. true costs time proportional to the page's chunks.",
+      "description": "Size the page in one pass (total_bytes, total_size). Default: true below 50 relations. true costs time proportional to the page's chunks.",
       "type": "boolean"
     },
     "include_views": {
@@ -390,9 +390,9 @@ is_hypertable and is_continuous_aggregate mark TimescaleDB objects. Without sche
 ## `timescale_query`
 
 ```text
-Run one read-only SQL statement and return columns, rows and whether the result was truncated.
+Run one read-only SQL statement, e.g. a time_bucket aggregation over a bounded time range, and return columns and rows.
 
-SELECT, WITH ... SELECT, VALUES, TABLE, EXPLAIN or SHOW. Data-modifying statements, SET/RESET, row locks, multiple statements and side-effect functions are refused; the transaction is READ ONLY regardless. Always bound the time range (WHERE ts > now() - interval '1 day') so only the relevant chunks are scanned; time_bucket('5 minutes', ts) AS bucket ... GROUP BY bucket and first()/last() are the TimescaleDB idioms. Values: timestamps as RFC 3339 strings, numerics as strings, bytea as base64.
+SELECT, WITH, VALUES, TABLE, EXPLAIN or SHOW. Data-modifying statements, SET/RESET, row locks, multiple statements and side-effect functions are refused; the transaction is READ ONLY regardless. Always bound the time range (WHERE ts > now() - interval '1 day') so only the relevant chunks are scanned; aggregate with time_bucket('5 minutes', ts) AS bucket ... GROUP BY bucket and first()/last(). Values: timestamps as RFC 3339 strings, numerics as strings, bytea as base64.
 ```
 
 ```json

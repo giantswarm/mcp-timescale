@@ -17,10 +17,10 @@ const defaultQueryRows = 100
 
 func registerQuery(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_query",
-		"Run one read-only SQL statement and return columns, rows and whether the result was truncated.",
-		"SELECT, WITH ... SELECT, VALUES, TABLE, EXPLAIN or SHOW. Data-modifying statements, SET/RESET, row locks, multiple statements and side-effect functions "+
+		"Run one read-only SQL statement, e.g. a time_bucket aggregation over a bounded time range, and return columns and rows.",
+		"SELECT, WITH, VALUES, TABLE, EXPLAIN or SHOW. Data-modifying statements, SET/RESET, row locks, multiple statements and side-effect functions "+
 			"are refused; the transaction is READ ONLY regardless. Always bound the time range (WHERE ts > now() - interval '1 day') so only the relevant chunks are scanned; "+
-			"time_bucket('5 minutes', ts) AS bucket ... GROUP BY bucket and first()/last() are the TimescaleDB idioms. "+
+			"aggregate with time_bucket('5 minutes', ts) AS bucket ... GROUP BY bucket and first()/last(). "+
 			"Values: timestamps as RFC 3339 strings, numerics as strings, bytea as base64.",
 		databaseArg(deps),
 		mcp.WithString(argSQL, mcp.Required(), mcp.Description("A single SQL statement. A trailing semicolon is allowed.")),
@@ -63,7 +63,7 @@ func registerQuery(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerExplain(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_explain",
-		"Show a SELECT-like statement's execution plan, to check chunk exclusion and index use.",
+		"Show a SELECT-like statement's execution plan (EXPLAIN, optionally ANALYZE), to check chunk exclusion and index use.",
 		"Runs EXPLAIN (ANALYZE <analyze>, BUFFERS <analyze>, FORMAT <format>). With analyze the statement runs (read-only) and real timings are reported. "+
 			"A bounded time range should scan few chunks.",
 		databaseArg(deps),
