@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/giantswarm/mcp-toolkit/tooldesc"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 
@@ -39,11 +40,11 @@ func registerInsertRow(s *mcpsrv.MCPServer, deps Deps) bool {
 	}
 	sort.Strings(writable)
 	tool := mcp.NewTool(toolInsertRow,
-		mcp.WithDescription("Insert one row into a writable table and commit it. This is the only write this server offers: no UPDATE, DELETE or DDL, "+
-			"and only the tables configured as writable (by database: "+strings.Join(writable, "; ")+"). "+
-			"row maps column names to values; PostgreSQL converts them to the column types (timestamps as RFC 3339 strings, arrays as JSON arrays, "+
-			"json/jsonb columns as JSON values). Columns left out keep their defaults. The insert runs as a role that may only INSERT into these tables "+
-			"and is attributed to you via application_name. Read the table's columns first with timescale_describe_table."),
+		tooldesc.Describe("Insert one row into a writable table and commit it: the only write this server offers.",
+			"No UPDATE, DELETE or DDL, and only these tables (by database: "+strings.Join(writable, "; ")+"). "+
+				"row maps column names to values; PostgreSQL converts them to the column types (timestamps as RFC 3339 strings, arrays as JSON arrays, "+
+				"json/jsonb columns as JSON values). Columns left out keep their defaults. Runs as a role that may only INSERT into these tables, "+
+				"attributed to you via application_name. Read the table's columns first with timescale_describe_table."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(false),

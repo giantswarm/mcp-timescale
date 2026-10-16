@@ -21,8 +21,8 @@ const (
 
 // listTool registers a catalog list tool that takes only the database
 // argument.
-func listTool(s *mcpsrv.MCPServer, deps Deps, name, description string, fetch func(ctx context.Context, db *timescale.Database, caller string) ([]timescale.Row, error)) {
-	tool := readOnlyTool(name, description, databaseArg(deps))
+func listTool(s *mcpsrv.MCPServer, deps Deps, name, summary, details string, fetch func(ctx context.Context, db *timescale.Database, caller string) ([]timescale.Row, error)) {
+	tool := readOnlyTool(name, summary, details, databaseArg(deps))
 	s.AddTool(tool, deps.wrap(tool.Name, []string{argDatabase}, func(ctx context.Context, req mcp.CallToolRequest, caller server.Caller) (any, callStats, error) {
 		db, err := deps.database(req, caller)
 		if err != nil {
@@ -38,8 +38,8 @@ func listTool(s *mcpsrv.MCPServer, deps Deps, name, description string, fetch fu
 
 func registerListSchemas(s *mcpsrv.MCPServer, deps Deps) {
 	listTool(s, deps, "timescale_list_schemas",
-		"List non-system schemas with owner, relation count and comment. TimescaleDB-internal schemas (_timescaledb_*) holding chunks are hidden; "+
-			"pass them explicitly to timescale_list_tables when needed.",
+		"List the non-system schemas with owner, relation count and comment.",
+		"TimescaleDB-internal schemas (_timescaledb_*), which hold the chunks, are hidden; pass one as schema to timescale_list_tables to list it.",
 		func(ctx context.Context, db *timescale.Database, caller string) ([]timescale.Row, error) {
 			return db.Schemas(ctx, caller)
 		})
@@ -52,8 +52,8 @@ func pageArgs(noun string) []mcp.ToolOption {
 		mcp.WithInteger(argLimit, mcp.Description(fmt.Sprintf("Maximum %s to return (default %d, max %d). The listing is ordered by schema, name.", noun, timescale.DefaultListLimit, maxListLimit)),
 			mcp.DefaultNumber(timescale.DefaultListLimit), mcp.Min(1), mcp.Max(maxListLimit)),
 		mcp.WithInteger(argOffset, mcp.Description(fmt.Sprintf("Number of %s to skip, for paging (default 0).", noun)), mcp.DefaultNumber(0), mcp.Min(0)),
-		mcp.WithBoolean(argSizes, mcp.Description(fmt.Sprintf("Compute total_bytes and total_size for the page. Default: true when the page holds fewer than %d %s, otherwise false and the result says so. "+
-			"Sizing stats every chunk of the listed hypertables, so an explicit true costs time proportional to the page's chunks; timescale_describe_table sizes one hypertable in detail.", timescale.SizeThreshold, noun))),
+		mcp.WithBoolean(argSizes, mcp.Description(fmt.Sprintf("Compute total_bytes and total_size. Default: true below %d %s on the page. true costs time proportional to the page's chunks.",
+			timescale.SizeThreshold, noun))),
 	}
 }
 
@@ -110,11 +110,10 @@ func pagePayload(db *timescale.Database, l *timescale.Listing, opts timescale.Li
 func registerListTables(s *mcpsrv.MCPServer, deps Deps) {
 	const noun = "relations"
 	tool := readOnlyTool("timescale_list_tables",
-		fmt.Sprintf("List tables (and by default views) with kind, owner, row estimate and comment, ordered by schema and name and paged with limit/offset. "+
-			"is_hypertable marks TimescaleDB hypertables; is_continuous_aggregate marks continuous aggregate views. "+
-			"total_bytes/total_size are included when the page holds fewer than %d relations or include_sizes is true "+
-			"(hypertables are sized like hypertable_size, chunks included, in one pass for the whole page); the result says when sizes were skipped and "+
-			"timescale_describe_table has one hypertable's detailed size. Without schema, system and _timescaledb_* schemas are skipped.", timescale.SizeThreshold),
+		"List tables and views with kind, owner, row estimate and comment, one page at a time, ordered by schema and name.",
+		fmt.Sprintf("is_hypertable and is_continuous_aggregate mark TimescaleDB objects. Without schema, system and _timescaledb_* schemas are skipped. "+
+			"total_bytes/total_size (hypertable_size for hypertables, chunks included) come when the page holds fewer than %d relations or include_sizes is true; "+
+			"the result says when sizes were skipped, and timescale_describe_table has one hypertable's detailed size.", timescale.SizeThreshold),
 		append([]mcp.ToolOption{
 			databaseArg(deps),
 			mcp.WithString(argSchema, mcp.Description("Restrict to one schema. Naming a schema also lists internal ones such as _timescaledb_internal.")),
@@ -147,9 +146,9 @@ func registerListTables(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerDescribeTable(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_describe_table",
-		"Describe a table, view or hypertable: columns (type, nullable, default, comment), primary key, indexes, foreign keys, view definition. "+
-			"For hypertables also the dimensions (time column and chunk interval), chunk count, compression settings, detailed size and the retention/compression/reorder policies; "+
-			"for continuous aggregates the definition, source hypertable and refresh policy.",
+		"Describe a table, view or hypertable: columns, keys, indexes and, for TimescaleDB objects, their settings and policies.",
+		"Also foreign keys and a view's definition. Hypertables add the time column, chunk interval, chunk count, compression settings, "+
+			"detailed size and retention/compression/reorder policies; continuous aggregates add the definition, source hypertable and refresh policy.",
 		databaseArg(deps),
 		mcp.WithString(argSchema, mcp.Required(), mcp.Description("Schema name, e.g. public.")),
 		mcp.WithString(argTable, mcp.Required(), mcp.Description("Table, view or hypertable name.")),
@@ -175,10 +174,10 @@ func registerDescribeTable(s *mcpsrv.MCPServer, deps Deps) {
 func registerListHypertables(s *mcpsrv.MCPServer, deps Deps) {
 	const noun = "hypertables"
 	tool := readOnlyTool("timescale_list_hypertables",
-		fmt.Sprintf("List TimescaleDB hypertables with owner, dimensions, chunk count, compression flag and the time column with its type and chunk interval, "+
-			"ordered by schema and name and paged with limit/offset. total_bytes/total_size (hypertable_size: the table plus every chunk, compressed data included) "+
-			"are included when the page holds fewer than %d hypertables or include_sizes is true, computed in one pass for the whole page; the result says when sizes were skipped "+
-			"and timescale_describe_table has one hypertable's detailed size. Hypertables that materialize a continuous aggregate are marked. "+
+		"List the hypertables with time column, chunk interval, chunk count and compression, one page at a time.",
+		fmt.Sprintf("Ordered by schema and name; hypertables that materialize a continuous aggregate are marked. "+
+			"total_bytes/total_size (hypertable_size: the table plus every chunk, compressed data included) come when the page holds fewer than %d hypertables "+
+			"or include_sizes is true; the result says when sizes were skipped, and timescale_describe_table has one hypertable's detailed size. "+
 			"Errors when the timescaledb extension is not installed.", timescale.SizeThreshold),
 		append([]mcp.ToolOption{
 			databaseArg(deps),
@@ -208,7 +207,7 @@ func registerListHypertables(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerListChunks(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_list_chunks",
-		"List the chunks of one hypertable with their time (or integer) range, compression state, tablespace and size. Newest first by default.",
+		"List one hypertable's chunks, newest first, with time or integer range, compression state, tablespace and size.", "",
 		databaseArg(deps),
 		mcp.WithString(argSchema, mcp.Required(), mcp.Description("Schema of the hypertable.")),
 		mcp.WithString(argHypertable, mcp.Required(), mcp.Description("Hypertable name.")),
@@ -249,8 +248,8 @@ func registerListChunks(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerListContinuousAggregates(s *mcpsrv.MCPServer, deps Deps) {
 	listTool(s, deps, "timescale_list_continuous_aggregates",
-		"List continuous aggregates (pre-computed time_bucket rollups) with their definition, source and materialization hypertable, materialized_only/finalized flags, "+
-			"compression and refresh policy. Query them like tables for fast long-range analysis. Empty on the Apache-licensed TimescaleDB build.",
+		"List the continuous aggregates (pre-computed time_bucket rollups) with definition, source and refresh policy.",
+		"Query them like tables for fast long-range analysis. Empty on the Apache-licensed TimescaleDB build.",
 		func(ctx context.Context, db *timescale.Database, caller string) ([]timescale.Row, error) {
 			return db.ContinuousAggregates(ctx, caller)
 		})
@@ -258,8 +257,8 @@ func registerListContinuousAggregates(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerListJobs(s *mcpsrv.MCPServer, deps Deps) {
 	listTool(s, deps, "timescale_list_jobs",
-		"List TimescaleDB background jobs (retention, compression, reorder and refresh policies, user-defined actions) with schedule, config, target hypertable "+
-			"and statistics: last run status, last successful finish, next start, total runs and failures.",
+		"List the TimescaleDB background jobs (policies and user-defined actions) with schedule, target and run statistics.",
+		"Retention, compression, reorder and refresh policies, with config, last run status, next start, total runs and failures.",
 		func(ctx context.Context, db *timescale.Database, caller string) ([]timescale.Row, error) {
 			return db.Jobs(ctx, caller)
 		})
@@ -267,8 +266,8 @@ func registerListJobs(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerSampleRows(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_sample_rows",
-		"Return the newest rows of a table: hypertables are ordered by their time dimension descending, other relations in storage order. "+
-			"Identifiers are validated against the catalog. Result shape matches timescale_query.",
+		"Return a table's rows: a hypertable's newest first, any other relation's in storage order.",
+		"Identifiers are validated against the catalog. The result has timescale_query's shape.",
 		databaseArg(deps),
 		mcp.WithString(argSchema, mcp.Required(), mcp.Description("Schema name.")),
 		mcp.WithString(argTable, mcp.Required(), mcp.Description("Table, view or hypertable name.")),

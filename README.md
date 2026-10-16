@@ -78,6 +78,9 @@ Every tool is read-only (`readOnlyHint: true`, `destructiveHint: false`,
 (unknown arguments are rejected) and returns one JSON document as text
 content. Every tool except `timescale_list_databases` takes `database` (the
 configured name); it is optional when exactly one database is configured.
+Every tool's description and input schema, as a model reads them:
+[docs/tools.md](docs/tools.md) (generated with `make tools-doc`, kept current
+by a test).
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
