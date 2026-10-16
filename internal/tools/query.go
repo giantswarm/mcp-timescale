@@ -17,10 +17,11 @@ const defaultQueryRows = 100
 
 func registerQuery(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_query",
-		"Run one read-only SQL statement (SELECT, WITH ... SELECT, VALUES, TABLE, EXPLAIN, SHOW) and return columns, rows and whether the result was truncated. "+
-			"Data-modifying statements, SET/RESET, row locks, multiple statements and side-effect functions are refused; the transaction is READ ONLY regardless. "+
-			"TimescaleDB idioms: time_bucket('5 minutes', ts) AS bucket ... GROUP BY bucket; first()/last() aggregates; always bound the time range "+
-			"(WHERE ts > now() - interval '1 day') so only the relevant chunks are scanned. Values: timestamps as RFC 3339 strings, numerics as strings, bytea as base64.",
+		"Run one read-only SQL statement, e.g. a time_bucket aggregation over a bounded time range, and return columns and rows.",
+		"SELECT, WITH, VALUES, TABLE, EXPLAIN or SHOW. Data-modifying statements, SET/RESET, row locks, multiple statements and side-effect functions "+
+			"are refused; the transaction is READ ONLY regardless. Always bound the time range (WHERE ts > now() - interval '1 day') so only the relevant chunks are scanned; "+
+			"aggregate with time_bucket('5 minutes', ts) AS bucket ... GROUP BY bucket and first()/last(). "+
+			"Values: timestamps as RFC 3339 strings, numerics as strings, bytea as base64.",
 		databaseArg(deps),
 		mcp.WithString(argSQL, mcp.Required(), mcp.Description("A single SQL statement. A trailing semicolon is allowed.")),
 		mcp.WithInteger("max_rows", mcp.Description("Rows to return (default 100). Capped by the database max_rows; truncated is true when more rows existed."), mcp.DefaultNumber(defaultQueryRows), mcp.Min(1)),
@@ -62,8 +63,9 @@ func registerQuery(s *mcpsrv.MCPServer, deps Deps) {
 
 func registerExplain(s *mcpsrv.MCPServer, deps Deps) {
 	tool := readOnlyTool("timescale_explain",
-		"Show the execution plan of a SELECT-like statement: EXPLAIN (ANALYZE <analyze>, BUFFERS <analyze>, FORMAT <format>). With analyze the statement runs "+
-			"(read-only) and real timings are reported. Use it to check chunk exclusion (few chunks scanned when the time range is bounded) and index use.",
+		"Show a SELECT-like statement's execution plan (EXPLAIN, optionally ANALYZE), to check chunk exclusion and index use.",
+		"Runs EXPLAIN (ANALYZE <analyze>, BUFFERS <analyze>, FORMAT <format>). With analyze the statement runs (read-only) and real timings are reported. "+
+			"A bounded time range should scan few chunks.",
 		databaseArg(deps),
 		mcp.WithString(argSQL, mcp.Required(), mcp.Description("The SELECT, WITH ... SELECT, VALUES or TABLE statement to explain.")),
 		mcp.WithBoolean("analyze", mcp.Description("Execute the statement and report actual timings and buffers (default false)."), mcp.DefaultBool(false)),
