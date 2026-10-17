@@ -7,19 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4-rc.1] - 2026-10-12
+
 ### Fixed
 
 - The MCP endpoint refuses a request body larger than 1 MiB before mcp-go reads it whole (CVE-2026-108859, no fixed mcp-go release yet; the scan ignores it until 2026-11-12). ([#65](https://github.com/giantswarm/mcp-timescale/issues/65))
+
+## [0.6.1] - 2026-09-29
+
+### Fixed
+
 - `timescale_query` and `timescale_explain` accept `CASE ... THEN f(x) END`: an `END` right after a closing parenthesis closed a `CASE`, but the guard read it as the start of a transaction-control statement and refused the query.
 - The `database` argument's description says it is required when more than one database is configured, matching the schema; it said "optional when exactly one database is configured" in both cases, and models left it out.
+
+## [0.6.0] - 2026-09-29
 
 ### Added
 
 - `timescale_insert_row`: a database entry's optional `insert` block (tables, own credentials, host and port defaulting to the database's) lets agents insert one row at a time into the listed tables, for records such as cases or annotations. Registered only when a database configures it; the insert role should hold INSERT on those tables and nothing else. Values go in as one JSON bind parameter (`json_populate_record`), identifiers are allowlisted and validated. Chart: `databases[].insert` with its own `secretRef`, mounted next to the reader Secret.
 
+## [0.5.18] - 2026-09-24
+
+### Fixed
+
+- `self-update` replaces the binary, symbolic links resolved, with a single rename (`selfupdatecosign.Install`, selfupdate-cosign v0.3.0). go-selfupdate's own swap moved the binary aside before it moved the new one in, so a process started in between found none, and concurrent updates could lose it. Now a process started meanwhile runs the old binary or the new one, several updates may run at once, and the binary keeps its mode.
+
+## [0.5.1] - 2026-09-09
+
+### Added
+
 - Chart: `resources.requests` and `resources.limits` accept any resource name, not only `cpu` and `memory`, so `ephemeral-storage` can be set for the server's emptyDir `/tmp` where a cluster policy requires it (Kyverno `require-emptydir-requests-and-limits`).
 
+## [0.5.0] - 2026-09-08
+
+### Added
+
 - `oauth.allowPrivateURLs` / `OAUTH_ALLOW_PRIVATE_URLS` (alias `MCP_OAUTH_ALLOW_PRIVATE_URLS`): the Dex issuer and its JWKS endpoint may resolve to private or loopback addresses, for a management cluster whose Dex sits behind an internal-only load balancer. Lifts mcp-oauth's SSRF guard for those two endpoints only; TLS verification stays on. Off by default, and off renders and behaves exactly as before (#14).
+
+## [0.3.0] - 2026-09-08
+
+### Added
+
 - `mcp-timescale self-update` installs the latest GitHub release only after its cosign Sigstore bundle verifies for a CircleCI build of giantswarm/mcp-timescale (`github.com/giantswarm/selfupdate-cosign`); a release without a bundle or a download that does not match its signature is refused and the installed binary stays as it is.
 - `pkg/project` carries the build identifiers the generated Makefile and the architect `go-build` job stamp at link time; `mcp-timescale version` and `--version` print the release version (plus commit and build time) instead of `dev`.
 - Running the binary without a subcommand starts the server, same as `serve`.
@@ -29,10 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Release binaries for linux, darwin and windows on amd64 and arm64 are attached to every GitHub Release next to their signature bundles (generated CI `cli` flavour).
-
-### Fixed
-
-- `self-update` replaces the binary, symbolic links resolved, with a single rename (`selfupdatecosign.Install`, selfupdate-cosign v0.3.0). go-selfupdate's own swap moved the binary aside before it moved the new one in, so a process started in between found none, and concurrent updates could lose it. Now a process started meanwhile runs the old binary or the new one, several updates may run at once, and the binary keeps its mode.
 
 ## [0.2.0] - 2026-09-08
 
