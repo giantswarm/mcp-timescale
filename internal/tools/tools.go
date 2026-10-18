@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/giantswarm/mcp-toolkit/tooldesc"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 
@@ -113,9 +114,9 @@ func Register(s *mcpsrv.MCPServer, deps Deps) []string {
 // readOnlyTool builds a tool with the annotations every tool here shares
 // (read-only, non-destructive, idempotent, closed world) and a strict input
 // schema that rejects unknown properties.
-func readOnlyTool(name, description string, opts ...mcp.ToolOption) mcp.Tool {
+func readOnlyTool(name, summary, details string, opts ...mcp.ToolOption) mcp.Tool {
 	base := []mcp.ToolOption{
-		mcp.WithDescription(description),
+		tooldesc.Describe(summary, details),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(true),

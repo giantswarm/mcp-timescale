@@ -21,6 +21,10 @@ test-vet: ## Run go test with coverage and go vet
 	NO_COLOR=true go test -cover ./...
 	go vet ./...
 
+.PHONY: tools-doc
+tools-doc: ## Regenerate docs/tools.md from the registered tools (the test TestToolsDocIsCurrent keeps it current)
+	TOOLS_DOC_UPDATE=1 go test -count=1 -run TestToolsDocIsCurrent ./internal/tools
+
 .PHONY: test-integration
 test-integration: ## Run the integration suite against a throwaway TimescaleDB container (Docker) or MCP_TIMESCALE_TEST_DSN
 	./scripts/integration-test.sh

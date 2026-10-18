@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Tool descriptions are shorter and lead with a summary line of at most 120 runes, the part muster's tool discovery shows ([giantswarm/giantswarm#38592](https://github.com/giantswarm/giantswarm/issues/38592)); `include_sizes` fits 150 runes. `docs/tools.md` (`make tools-doc`) shows every tool's description and input schema as a model reads them, kept current by a test, and a test holds the descriptions to the budget.
 - Release binaries for linux, darwin and windows on amd64 and arm64 are attached to every GitHub Release next to their signature bundles (generated CI `cli` flavour).
 
 ### Fixed
