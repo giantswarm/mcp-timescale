@@ -3,7 +3,7 @@ module github.com/giantswarm/mcp-timescale
 go 1.26.0
 
 require (
-	github.com/giantswarm/go-selfupdate v1.6.5
+	github.com/giantswarm/go-selfupdate v1.6.6
 	github.com/giantswarm/mcp-oauth v1.7.4
 	github.com/giantswarm/mcp-toolkit v0.4.2
 	github.com/giantswarm/selfupdate-cosign v0.3.8
