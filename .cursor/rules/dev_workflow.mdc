@@ -20,8 +20,7 @@ branch from an up-to-date `main`, open a PR, let CI decide.
    - `pre-commit run --all-files` — gofmt, goimports (`-local
      github.com/giantswarm/mcp-timescale`), golangci-lint with gosec/goconst,
      `go mod tidy`, the values schema (`helm schema` → `schemalint`), helm-docs;
-   - `make helm-lint`, `make helm-template`, `make helm-test` for chart changes;
-   - `make govulncheck` when dependencies move.
+   - `make helm-lint`, `make helm-template`, `make helm-test` for chart changes.
 4. **PR** with a Conventional Commit title (`feat:`, `fix:`, `chore:`, `docs:`,
    `feat!:` for a breaking change) — the title becomes the release note.
    Required checks: PR title, pre-commit, values schema, and the CircleCI

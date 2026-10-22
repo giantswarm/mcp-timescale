@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pkg/project` carries the build identifiers the generated Makefile and the architect `go-build` job stamp at link time; `mcp-timescale version` and `--version` print the release version (plus commit and build time) instead of `dev`.
 - Running the binary without a subcommand starts the server, same as `serve`.
 - `tools.ReadOnlyTools` names the single tool class; `TestEveryToolIsReadOnlyAndStrict` compares it with the registered tools and their annotations, and the server logs its write policy (`readOnly=true writeMode=none`) at startup.
-- Chart unit tests (`make helm-test`), `make govulncheck`, `make test-vet`, `.golangci.yml` goconst tuning, `.helmignore` and repo cursor rules — the same developer surface as mcp-kubernetes.
+- Chart unit tests (`make helm-test`), `make test-vet`, `.golangci.yml` goconst tuning, `.helmignore` and repo cursor rules — the same developer surface as mcp-kubernetes.
 
 ### Changed
 
