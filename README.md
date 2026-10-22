@@ -386,8 +386,8 @@ on.
 `make build` (stamps the version), `make test`, `make lint` and `make fmt` come
 from the generated Makefile. `make test-integration` runs the Docker-backed
 integration suite, `make helm-lint` / `make helm-template` render the chart
-with `helm/mcp-timescale/ci/ci-values.yaml`, `make helm-test` runs the chart
-unit tests and `make govulncheck` scans the module graph.
+with `helm/mcp-timescale/ci/ci-values.yaml` and `make helm-test` runs the chart
+unit tests.
 `pre-commit run --all-files` is what CI runs: gofmt, goimports, golangci-lint
 (gosec, goconst), `go mod tidy`, the values schema and helm-docs.
 `.cursor/rules/` carries the architecture invariants and this workflow for
