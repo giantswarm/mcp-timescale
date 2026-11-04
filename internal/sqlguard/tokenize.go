@@ -24,7 +24,10 @@ type token struct {
 // tokenize splits sql into tokens, skipping whitespace and comments. String
 // literals and quoted identifiers become single tokens so keywords inside
 // them are never mistaken for statements. Unterminated strings, quoted
-// identifiers or block comments are rejected.
+// identifiers or block comments are rejected, and so are Unicode-escape
+// identifiers (U&"..."): PostgreSQL decodes their \XXXX, \+XXXXXX and
+// UESCAPE forms into a name that the deny-list lookup would otherwise need
+// decoded here as well, and the read-only tools have no use for them.
 func tokenize(sql string) ([]token, error) {
 	var toks []token
 	n := len(sql)
@@ -102,16 +105,14 @@ func tokenize(sql string) ([]token, error) {
 				}
 			}
 			if i+1 < n && (word == "u" || word == "U") && sql[i] == '&' && (sql[i+1] == '\'' || sql[i+1] == '"') {
-				q := sql[i+1]
-				end, ok := skipQuoted(sql, i+2, q)
+				if sql[i+1] == '"' {
+					return nil, reject(`Unicode-escape identifiers (U&"...") are not allowed; write the identifier with plain double quotes`)
+				}
+				end, ok := skipQuoted(sql, i+2, '\'')
 				if !ok {
 					return nil, reject("unterminated string literal")
 				}
-				kind := tokString
-				if q == '"' {
-					kind = tokQuotedIdent
-				}
-				toks = append(toks, token{kind: kind, pos: start})
+				toks = append(toks, token{kind: tokString, pos: start})
 				i = end
 				continue
 			}

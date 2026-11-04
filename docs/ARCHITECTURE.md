@@ -66,11 +66,12 @@ and `/metrics`.
    quoted identifiers and comments and accepts only SELECT, WITH … SELECT,
    VALUES, TABLE, EXPLAIN and SHOW. It rejects data-modifying keywords in
    statement position (CTE bodies, the main statement of a WITH), `SELECT …
-   INTO`, row locks (`FOR UPDATE` and friends), a second statement, and calls
-   of side-effect functions (`pg_terminate_backend`, `pg_read_file`,
-   `set_config`, advisory locks, `dblink`, large objects, WAL and replication
-   control, …). It is a heuristic that produces clear errors before any round
-   trip; layers 1-4 are the guarantee.
+   INTO`, row locks (`FOR UPDATE` and friends), a second statement,
+   Unicode-escape identifiers (`U&"…"`), and calls of side-effect functions
+   (`pg_terminate_backend`, `pg_read_file`, `set_config`, advisory locks,
+   `dblink`, large objects, WAL and replication control, …). It is a
+   heuristic that produces clear errors before any round trip; layers 1-4 are
+   the guarantee.
 6. **Bounds.** SELECT-like statements run through a `NO SCROLL` cursor and the
    server fetches `max_rows + 1` rows, so at most that many rows leave the
    database no matter what the statement would return. `max_rows` is capped by

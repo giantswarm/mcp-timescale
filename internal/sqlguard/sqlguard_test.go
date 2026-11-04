@@ -56,6 +56,9 @@ func TestClassifyAccepts(t *testing.T) {
 		{"pg_sleep allowed", "SELECT pg_sleep(1)", KindSelect, ""},
 		{"pg_stat_activity", "SELECT application_name FROM pg_stat_activity", KindSelect, ""},
 		{"unicode identifier", "SELECT größe FROM tabelle", KindSelect, ""},
+		{"unicode escape string", `SELECT U&'d\0061t\+000061' AS s`, KindSelect, ""},
+		{"unicode escape string with uescape", `SELECT U&'d!0061t!+000061' UESCAPE '!' AS s`, KindSelect, ""},
+		{"unicode escape string containing a drop", `SELECT U&'; DROP TABLE t'`, KindSelect, ""},
 		{"number literals", "SELECT 1.5e-3, .5, 10", KindSelect, ""},
 	}
 	for _, tc := range cases {
@@ -81,16 +84,17 @@ func TestClassifyAccepts(t *testing.T) {
 
 // Expected error fragments shared by several cases.
 const (
-	sqlSelectOne   = "SELECT 1"
-	msgEmpty       = "empty"
-	kwDelete       = "DELETE"
-	kwInsert       = "INSERT"
-	msgMultiple    = "multiple statements"
-	msgRowLock     = "row locking"
-	msgExplainOnly = "EXPLAIN may only explain"
-	msgKeyword     = "must start with a keyword"
-	fnTerminate    = "pg_terminate_backend"
-	kwUpdate       = "UPDATE"
+	sqlSelectOne    = "SELECT 1"
+	msgEmpty        = "empty"
+	kwDelete        = "DELETE"
+	kwInsert        = "INSERT"
+	msgMultiple     = "multiple statements"
+	msgRowLock      = "row locking"
+	msgExplainOnly  = "EXPLAIN may only explain"
+	msgKeyword      = "must start with a keyword"
+	fnTerminate     = "pg_terminate_backend"
+	kwUpdate        = "UPDATE"
+	msgUnicodeIdent = "Unicode-escape identifiers"
 )
 
 func TestClassifyRejects(t *testing.T) {
@@ -167,6 +171,15 @@ func TestClassifyRejects(t *testing.T) {
 		{"unterminated string", "SELECT 'unterminated", "unterminated string"},
 		{"unterminated block comment", "SELECT /* unterminated", "unterminated block comment"},
 		{"unterminated quoted identifier", `SELECT "unterminated`, "unterminated quoted identifier"},
+		{"unicode escape identifier", `SELECT U&"pg_advisory_lock"(1)`, msgUnicodeIdent},
+		{"unicode escape identifier lowercase", `select u&"pg_advisory_lock"(1)`, msgUnicodeIdent},
+		{"unicode escape identifier set_config", `SELECT U&"set_config"('search_path', 'x', false)`, msgUnicodeIdent},
+		{"unicode escape identifier qualified", `SELECT pg_catalog.U&"pg_advisory_lock"(1)`, msgUnicodeIdent},
+		{"unicode escape identifier with escape", `SELECT U&"pg_advisory_loc\006b"(1)`, msgUnicodeIdent},
+		{"unicode escape identifier with uescape", `SELECT U&"pg_advisory_loc!006b" UESCAPE '!'(1)`, msgUnicodeIdent},
+		{"unicode escape identifier in explain", `EXPLAIN SELECT U&"pg_advisory_lock"(1)`, msgUnicodeIdent},
+		{"unicode escape identifier as column", `SELECT U&"gr\00F6\00DFe" FROM t`, msgUnicodeIdent},
+		{"unterminated unicode escape identifier", `SELECT U&"unterminated`, msgUnicodeIdent},
 		{"unterminated dollar quote", "SELECT $q$ never closed", "unterminated dollar-quoted"},
 		{"string escape trick", `SELECT 'abc\'; DELETE FROM t; --'`, msgMultiple},
 		{"starts with number", "1 + 1", msgKeyword},
