@@ -44,7 +44,7 @@ const (
 	msgTokenRefused = "Token validation failed"
 	// mcp-oauth's WARN when a token with a trusted audience fails JWKS
 	// validation; its error field carries the SSRF guard's reason.
-	msgForwardedFailed = "Forwarded ID token validation failed, falling back to userinfo"
+	msgForwardedFailed = "Forwarded ID token refused"
 )
 
 // localhostTLSServer serves h over TLS under the name "localhost", the way a

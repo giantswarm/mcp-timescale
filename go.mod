@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/giantswarm/go-selfupdate v1.7.6
-	github.com/giantswarm/mcp-oauth v1.10.2
+	github.com/giantswarm/mcp-oauth v1.13.2
 	github.com/giantswarm/mcp-toolkit v0.5.3
 	github.com/giantswarm/selfupdate-cosign v0.3.22
 	github.com/go-jose/go-jose/v4 v4.1.9
@@ -18,6 +18,7 @@ require (
 
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
+	code.dny.dev/ssrf v0.3.0 // indirect
 	code.gitea.io/sdk/gitea v0.25.1 // indirect
 	github.com/42wim/httpsig v1.2.4 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
