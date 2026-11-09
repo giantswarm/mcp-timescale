@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/giantswarm/mcp-toolkit/brand"
 	"github.com/giantswarm/mcp-toolkit/health"
 	"github.com/giantswarm/mcp-toolkit/httpx"
 	"github.com/giantswarm/mcp-toolkit/logging"
@@ -115,16 +116,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	localCaller := flagTransport == server.TransportStdio || !cfg.OAuthEnabled
 
 	toolTimeout := max(registry.MaxStatementTimeout()+toolTimeoutSlack, minToolTimeout)
-	mcp := mcpsrv.NewMCPServer(
-		serviceName, rootCmd.Version,
-		mcpsrv.WithToolCapabilities(false),
-		mcpsrv.WithRecovery(),
-		mcpsrv.WithInstructions(tools.Instructions),
-		mcpsrv.WithStrictInputSchemaDefault(),
-		mcpsrv.WithInputSchemaValidation(),
-		mcpsrv.WithToolHandlerMiddleware(timeout.New(toolTimeout)),
-		mcpsrv.WithToolHandlerMiddleware(responsecap.New(responsecap.Options{})),
-	)
+	mcp := newMCPServer(rootCmd.Version, toolTimeout)
 	names := tools.Register(mcp, tools.Deps{Registry: registry, Log: logger, LocalCaller: localCaller})
 	// The posture line operators grep for (mcp-capi prints the same shape):
 	// read-only unless a database opts into the insert path.
@@ -239,4 +231,19 @@ func runHTTP(ctx context.Context, srv *http.Server, drain time.Duration, label s
 		done <- err
 	}()
 	return done
+}
+
+// newMCPServer builds the MCP server without its tools.
+func newMCPServer(version string, toolTimeout time.Duration) *mcpsrv.MCPServer {
+	return mcpsrv.NewMCPServer(
+		serviceName, version,
+		mcpsrv.WithToolCapabilities(false),
+		mcpsrv.WithRecovery(),
+		mcpsrv.WithInstructions(tools.Instructions),
+		mcpsrv.WithStrictInputSchemaDefault(),
+		mcpsrv.WithInputSchemaValidation(),
+		mcpsrv.WithToolHandlerMiddleware(timeout.New(toolTimeout)),
+		mcpsrv.WithToolHandlerMiddleware(responsecap.New(responsecap.Options{})),
+		brand.WithIcon(timescaleLogo),
+	)
 }
