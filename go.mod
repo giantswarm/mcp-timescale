@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/giantswarm/go-selfupdate v1.7.7
-	github.com/giantswarm/mcp-oauth v1.13.14
+	github.com/giantswarm/mcp-oauth v1.13.18
 	github.com/giantswarm/mcp-toolkit v0.5.3
 	github.com/giantswarm/selfupdate-cosign v0.3.28
 	github.com/go-jose/go-jose/v4 v4.1.9
@@ -12,7 +12,9 @@ require (
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/spf13/cobra v1.10.2
+	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
+	golang.org/x/net v0.62.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -130,7 +132,6 @@ require (
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/crypto/openpgp v0.1.0-deprecated // indirect
 	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.38.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect

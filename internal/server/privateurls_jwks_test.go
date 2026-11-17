@@ -175,7 +175,7 @@ func newPrivateJWKSServer(t *testing.T, allow bool) (*client.Client, *bytes.Buff
 		TrustedAudiences: []string{privateAudience},
 		JWKSRootCAs:      pool,
 	}
-	allowPrivateURLs(cfg, allow)
+	allowPrivateIPJWKS(cfg, allow)
 	srv, err := oauth.NewServerWithCombined(provider, store, cfg, logger)
 	if err != nil {
 		t.Fatalf("oauth.NewServerWithCombined: %v", err)
@@ -215,16 +215,11 @@ func jsonLogLines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	return entries
 }
 
-// TestForwardedToken_PrivateJWKS pins issue #14: the JWKS of an identity
-// provider reached through a hostname that resolves to a private or loopback
-// address is refused by mcp-oauth's SSRF guard, so a valid forwarded ID token
-// with a trusted audience never yields a caller. OAUTH_ALLOW_PRIVATE_URLS
-// lifts that guard and the same token is accepted, attributed to the
-// forwarded identity.
+// The JWKS address policy controls acceptance independently of token validity.
 func TestForwardedToken_PrivateJWKS(t *testing.T) {
 	t.Run("default refuses the token: its JWKS resolves to a loopback address", func(t *testing.T) {
 		cli, buf := newPrivateJWKSServer(t, false)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
 		err := cli.Start(ctx)
@@ -255,9 +250,9 @@ func TestForwardedToken_PrivateJWKS(t *testing.T) {
 		}
 	})
 
-	t.Run("OAUTH_ALLOW_PRIVATE_URLS accepts the same token", func(t *testing.T) {
+	t.Run("OAUTH_ALLOW_PRIVATE_IP_JWKS accepts the same token", func(t *testing.T) {
 		cli, buf := newPrivateJWKSServer(t, true)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
 		if err := cli.Start(ctx); err != nil {
