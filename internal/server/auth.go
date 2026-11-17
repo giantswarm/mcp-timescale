@@ -31,19 +31,17 @@ type Auth struct {
 // optional token encryptor, and the mcp-oauth server, and returns an *Auth
 // ready to mount on the MCP mux. Every knob comes from OAUTH_* env vars
 // parsed by mcp-oauth's oauthconfig package — see the README for the full
-// list. OAUTH_ALLOW_PRIVATE_URLS is the one knob this package adds on top
-// (privateurls.go); it only reaches the forwarded-ID-token JWKS fetch.
+// list. OAUTH_ALLOW_PRIVATE_IP_JWKS controls the JWKS fetch address policy.
 func NewAuth(_ context.Context, logger *slog.Logger) (*Auth, error) {
-	allowPrivate, err := AllowPrivateURLsFromEnv()
+	allowPrivate, err := AllowPrivateIPJWKSFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("oauth: %w", err)
 	}
 	if allowPrivate {
-		logger.Warn("SECURITY WARNING: "+EnvAllowPrivateURLs+" is enabled — the JWKS endpoint of forwarded ID tokens may resolve to private or loopback addresses",
+		logger.Warn("SECURITY WARNING: "+EnvAllowPrivateIPJWKS+" is enabled — the JWKS endpoint of forwarded ID tokens may resolve to private or loopback addresses",
 			"risk", "SSRF guard lifted for the JWKS fetch of the configured identity provider",
 			"recommendation", "Only for an identity provider behind an internal-only load balancer; TLS verification stays on",
 			"cwe", "CWE-918")
-		logger.Info(EnvAllowPrivateURLs + " no longer changes how Dex is reached: the Dex client already reaches private addresses and follows HTTP_PROXY, HTTPS_PROXY and NO_PROXY")
 	}
 
 	provider, err := oauthconfig.ProviderFromEnv()
@@ -70,7 +68,7 @@ func NewAuth(_ context.Context, logger *slog.Logger) (*Auth, error) {
 		_ = storeClose()
 		return nil, fmt.Errorf("oauth config from env: %w", err)
 	}
-	allowPrivateURLs(cfg, allowPrivate)
+	allowPrivateIPJWKS(cfg, allowPrivate)
 
 	srv, err := oauth.NewServerWithCombined(provider, store, cfg, logger)
 	if err != nil {

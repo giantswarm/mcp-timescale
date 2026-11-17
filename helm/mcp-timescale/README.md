@@ -44,8 +44,9 @@ Kubernetes: `>=1.27.0-0`
 | oauth.scopes[1] | string | `"email"` |  |
 | oauth.scopes[2] | string | `"groups"` |  |
 | oauth.allowInsecureHTTP | bool | `false` |  |
-| oauth.allowLocalhostRedirectURIs | bool | `false` |  |
-| oauth.allowPrivateURLs | bool | `false` | When true, the JWKS endpoint that validates forwarded ID tokens may resolve to private (RFC 1918), loopback or link-local addresses: a management cluster whose Dex sits behind an internal-only load balancer. Lifts mcp-oauth's SSRF guard for that operator-configured endpoint only and keeps TLS verification on. Without it every forwarded token is refused there because the JWKS fetch fails. Dex discovery and the token endpoint need no setting: they reach private addresses and follow HTTP_PROXY, HTTPS_PROXY and NO_PROXY. Rendered as OAUTH_ALLOW_PRIVATE_URLS; the same knob as allowPrivateURLs on mcp-kubernetes, mcp-capi and mcp-prometheus. |
+| oauth.allowLocalhostRedirectURIs | bool | `false` | Deprecated and ignored. Native-app loopback redirect URIs are always accepted on any port (RFC 8252 section 7.3). Non-loopback redirect URIs require HTTPS unless an explicit redirect policy permits HTTP. Scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first. |
+| oauth.allowPrivateIPJWKS | bool | `false` | Permit the configured JWKS endpoint to resolve to private addresses. HTTPS and TLS verification remain required. Dex discovery and token calls already follow HTTP_PROXY, HTTPS_PROXY and NO_PROXY without this setting. |
+| oauth.allowPrivateURLs | bool | `false` | Obsolete; true is rejected. Use allowPrivateIPJWKS for JWKS fetching. The false compatibility value is scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first. |
 | oauth.dex.issuerURL | string | `""` |  |
 | oauth.dex.clientIDSecretRef.name | string | `""` |  |
 | oauth.dex.clientIDSecretRef.key | string | `"client-id"` |  |

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -64,7 +65,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	shutdownCtx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	shutdownCtx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	cfg, err := server.LoadConfig()
@@ -182,10 +183,8 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	hc.SetReady(false)
 
 	mcpCancel()
-	<-mcpDone
 	obsCancel()
-	<-obsDone
-	return nil
+	return errors.Join(<-mcpDone, <-obsDone)
 }
 
 // logDatabases records the inventory at startup: names and endpoints, never

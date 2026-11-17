@@ -1,75 +1,75 @@
 package server
 
 import (
-	"strings"
 	"testing"
 
 	oauth "github.com/giantswarm/mcp-oauth"
+	"github.com/stretchr/testify/require"
 )
 
 const testOwnIssuer = "https://mcp.example/"
 
-func TestAllowPrivateURLsFromEnv(t *testing.T) {
+func TestPrivateIPJWKSFromEnv(t *testing.T) {
+	const canonicalName = "OAUTH_ALLOW_PRIVATE_IP_JWKS"
+	const obsoleteName = "OAUTH_ALLOW_PRIVATE_URLS"
+	const aliasName = "MCP_OAUTH_ALLOW_PRIVATE_URLS"
+
 	tests := []struct {
-		name    string
-		primary string
-		alias   string
-		want    bool
-		wantErr string
+		name      string
+		canonical string
+		obsolete  string
+		alias     string
+		want      bool
+		wantError string
 	}{
 		{name: "unset is off"},
-		{name: "primary true", primary: "true", want: true},
-		{name: "primary 1", primary: "1", want: true},
-		{name: "alias true (mcp-capi / mcp-prometheus spelling)", alias: "true", want: true},
-		{name: "primary false wins over alias true", primary: "false", alias: "true"},
-		{name: "primary that is not a bool fails startup", primary: "yes", wantErr: EnvAllowPrivateURLs},
-		{name: "alias that is not a bool fails startup", alias: "nope", wantErr: EnvAllowPrivateURLsAlias},
+		{name: "canonical true", canonical: "true", want: true},
+		{name: "canonical 1", canonical: "1", want: true},
+		{name: "canonical false", canonical: "false"},
+		{name: "canonical malformed", canonical: "yes", wantError: canonicalName},
+		{name: "obsolete false", obsolete: "false"},
+		{name: "obsolete true", obsolete: "true", wantError: obsoleteName + " is obsolete"},
+		{name: "obsolete true cannot be shadowed", canonical: "false", obsolete: "true", wantError: obsoleteName + " is obsolete"},
+		{name: "obsolete malformed", canonical: "false", obsolete: "yes", wantError: obsoleteName},
+		{name: "alias false", alias: "false"},
+		{name: "alias true cannot be shadowed", canonical: "false", obsolete: "false", alias: "true", wantError: aliasName + " is obsolete"},
+		{name: "alias malformed cannot be shadowed", canonical: "false", obsolete: "false", alias: "nope", wantError: aliasName},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(EnvAllowPrivateURLs, tt.primary)
-			t.Setenv(EnvAllowPrivateURLsAlias, tt.alias)
-
-			got, err := AllowPrivateURLsFromEnv()
-			if tt.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("err = %v, want one naming %s", err, tt.wantErr)
-				}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv(canonicalName, testCase.canonical)
+			t.Setenv(obsoleteName, testCase.obsolete)
+			t.Setenv(aliasName, testCase.alias)
+			got, err := AllowPrivateIPJWKSFromEnv()
+			if testCase.wantError != "" {
+				require.ErrorContains(t, err, testCase.wantError)
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("got %v, want %v", got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, testCase.want, got)
 		})
 	}
 }
 
-func TestAllowPrivateURLs_ServerConfig(t *testing.T) {
-	tests := []struct {
-		name  string
-		pre   bool
-		allow bool
-		want  bool
+func TestAllowPrivateIPJWKS_ServerConfig(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		preset bool
+		allow  bool
+		want   bool
 	}{
-		{name: "off leaves the JWKS guard on", pre: false, allow: false, want: false},
-		{name: "on lifts the JWKS guard", pre: false, allow: true, want: true},
-		{name: "off leaves a preset value alone", pre: true, allow: false, want: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &oauth.ServerConfig{Issuer: testOwnIssuer, TrustedAudiences: []string{"aud"}, AllowPrivateIPJWKS: tt.pre}
-
-			allowPrivateURLs(cfg, tt.allow)
-
-			if cfg.AllowPrivateIPJWKS != tt.want {
-				t.Errorf("AllowPrivateIPJWKS = %v, want %v", cfg.AllowPrivateIPJWKS, tt.want)
-			}
-			if cfg.Issuer != testOwnIssuer || len(cfg.TrustedAudiences) != 1 || cfg.AllowPrivateIPClientMetadata || cfg.JWKSRootCAs != nil {
-				t.Errorf("fields besides AllowPrivateIPJWKS changed: %+v", cfg)
-			}
+		{name: "off keeps the JWKS guard"},
+		{name: "on lifts the JWKS guard", allow: true, want: true},
+		{name: "off preserves an explicit upstream policy", preset: true, want: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			configuration := &oauth.ServerConfig{Issuer: testOwnIssuer, TrustedAudiences: []string{"aud"}, AllowPrivateIPJWKS: testCase.preset}
+			allowPrivateIPJWKS(configuration, testCase.allow)
+			require.Equal(t, testCase.want, configuration.AllowPrivateIPJWKS)
+			require.Equal(t, testOwnIssuer, configuration.Issuer)
+			require.Equal(t, []string{"aud"}, configuration.TrustedAudiences)
+			require.False(t, configuration.AllowPrivateIPClientMetadata)
+			require.Nil(t, configuration.JWKSRootCAs)
 		})
 	}
 }

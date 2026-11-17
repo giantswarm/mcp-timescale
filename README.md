@@ -241,7 +241,7 @@ Every knob is an env var; flags override. The OAuth knobs come straight from
 | `OAUTH_DEX_ISSUER_URL` | — | Upstream Dex issuer (provider=dex) |
 | `OAUTH_DEX_CLIENT_ID` / `OAUTH_DEX_CLIENT_SECRET[_FILE]` | — | Dex client |
 | `OAUTH_TRUSTED_AUDIENCES` | — | Audiences of forwarded ID tokens (muster's Dex client ID) |
-| `OAUTH_ALLOW_PRIVATE_URLS` | false | Let the JWKS fetch that validates forwarded ID tokens resolve to private/loopback addresses (Dex behind an internal-only load balancer); TLS stays verified. Dex discovery and the token endpoint need no setting and follow `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`. `MCP_OAUTH_ALLOW_PRIVATE_URLS` is accepted as an alias |
+| `OAUTH_ALLOW_PRIVATE_IP_JWKS` | false | Let the JWKS fetch that validates forwarded ID tokens resolve to private/loopback addresses (Dex behind an internal-only load balancer); TLS stays verified. Dex discovery and the token endpoint need no setting and follow `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` |
 | `OAUTH_STORAGE_BACKEND` | memory | memory \| valkey (valkey for >1 replica with interactive logins) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Tracing; empty disables |
 
@@ -363,7 +363,7 @@ Tools then appear in muster with the `x_timescale_` prefix
 person who is logged in to muster.
 
 When the installation's Dex resolves to a private address (an internal-only
-load balancer in front of it), set `oauth.allowPrivateURLs: true`. Otherwise
+load balancer in front of it), set `oauth.allowPrivateIPJWKS: true`. Otherwise
 mcp-oauth's SSRF guard refuses the JWKS fetch (`Token validation failed …
 resolved to restricted IP`) and every forwarded token is rejected. The flag
 lifts the guard for that JWKS fetch only; TLS verification stays on. Dex
@@ -371,6 +371,8 @@ discovery and the token endpoint need no setting: they reach a private Dex and
 follow `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, so on a proxied
 installation list the Dex host in `NO_PROXY` when it must be reached
 directly.
+
+See [migration instructions](docs/private-jwks-migration.md) for obsolete private-URL settings.
 
 ## Development
 

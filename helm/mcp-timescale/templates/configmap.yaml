@@ -1,3 +1,6 @@
+{{- if .Values.oauth.allowPrivateURLs -}}
+{{- fail "oauth.allowPrivateURLs=true is obsolete; remove it; use oauth.allowPrivateIPJWKS=true for private-address JWKS fetching; Dex discovery needs no setting" -}}
+{{- end -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -21,11 +24,8 @@ data:
   {{- if .Values.oauth.trustedRedirectSchemes }}
   OAUTH_TRUSTED_REDIRECT_SCHEMES: {{ join "," .Values.oauth.trustedRedirectSchemes | quote }}
   {{- end }}
-  {{- if .Values.oauth.allowLocalhostRedirectURIs }}
-  OAUTH_ALLOW_LOCALHOST_REDIRECT_URIS: "true"
-  {{- end }}
-  {{- if .Values.oauth.allowPrivateURLs }}
-  OAUTH_ALLOW_PRIVATE_URLS: "true"
+  {{- if .Values.oauth.allowPrivateIPJWKS }}
+  OAUTH_ALLOW_PRIVATE_IP_JWKS: "true"
   {{- end }}
   {{- else }}
   OAUTH_ENABLED: "false"

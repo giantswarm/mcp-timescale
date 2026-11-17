@@ -2,84 +2,172 @@ package server
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/binary"
+	"encoding/json"
+	"encoding/pem"
 	"io"
-	"log/slog"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/dns/dnsmessage"
+
+	"log/slog"
 )
 
 const dexProxyChildEnv = "MCP_TIMESCALE_DEX_PROXY_CHILD"
 
-func TestDexDiscoveryFollowsProxyEnvironment(t *testing.T) {
-	backend := httptest.NewTLSServer(http.NotFoundHandler())
-	defer backend.Close()
+const dexProxyHostname = "dex-proxy.test"
 
-	tests := []struct {
+func TestDexDiscoveryFollowsProxyEnvironment(t *testing.T) {
+	var issuer string
+	var discoveries atomic.Int32
+	backend := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(writer, request)
+			return
+		}
+		discoveries.Add(1)
+		writer.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(writer).Encode(map[string]string{
+			"issuer":                 issuer,
+			"authorization_endpoint": issuer + "/auth",
+			"token_endpoint":         issuer + "/token",
+			"jwks_uri":               issuer + "/keys",
+		}); err != nil {
+			t.Errorf("encode discovery document: %v", err)
+		}
+	}))
+	certificate, certificatePEM := dexProxyCertificate(t)
+	backend.TLS = &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12}
+	backend.StartTLS()
+	t.Cleanup(backend.Close)
+	_, port, err := net.SplitHostPort(backend.Listener.Addr().String())
+	require.NoError(t, err)
+	issuer = "https://" + net.JoinHostPort(dexProxyHostname, port)
+	caFile := filepath.Join(t.TempDir(), "ca.crt")
+	require.NoError(t, os.WriteFile(caFile, certificatePEM, 0o600))
+
+	for _, testCase := range []struct {
 		name       string
 		noProxy    string
 		wantTunnel bool
 	}{
 		{name: "issuer behind HTTPS_PROXY", wantTunnel: true},
-		{name: "issuer in NO_PROXY", noProxy: "example.com", wantTunnel: false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		{name: "issuer in NO_PROXY", noProxy: dexProxyHostname},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
 			proxy := newTunnelProxy(t, backend.Listener.Addr().String())
-
-			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			before := discoveries.Load()
+			childContext, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
-			command := exec.CommandContext(ctx, os.Args[0], //nolint:gosec // re-executes this test binary
-				"-test.run=^TestDexDiscoveryProxyChild$", "-test.count=1", "-test.v")
-			command.Env = append(environmentWithoutProxy(),
+			command := exec.CommandContext(childContext, os.Args[0], //nolint:gosec // Executes the current test binary.
+				"-test.run=^TestDexDiscoveryProxyChild$", "-test.count=1")
+			command.Env = append(dexProxyEnvironment(),
 				dexProxyChildEnv+"=1",
+				"DEX_PROXY_TEST_ISSUER="+issuer,
+				"SSL_CERT_FILE="+caFile,
+				"SSL_CERT_DIR="+t.TempDir(),
 				"HTTPS_PROXY="+proxy.server.URL,
-				"NO_PROXY="+tc.noProxy,
-				"OAUTH_PROVIDER=dex",
-				"OAUTH_ISSUER=https://mcp-timescale.example.com",
-				"OAUTH_DEX_ISSUER_URL=https://example.com",
-				"OAUTH_DEX_CLIENT_ID=mcp-timescale",
-				"OAUTH_DEX_CLIENT_SECRET=secret",
-				"OAUTH_ALLOW_PRIVATE_URLS=true",
+				"NO_PROXY="+testCase.noProxy,
 			)
-			output, _ := command.CombinedOutput()
-
+			output, err := command.CombinedOutput()
+			require.NoError(t, err, "%s", output)
+			require.Greater(t, discoveries.Load(), before, "discovery must reach the local issuer")
 			tunnels := proxy.connectedHosts()
-			if tc.wantTunnel && (len(tunnels) == 0 || tunnels[0] != "example.com:443") {
-				t.Errorf("proxy CONNECT hosts = %v, want example.com:443\nchild output:\n%s", tunnels, output)
-			}
-			if !tc.wantTunnel && len(tunnels) != 0 {
-				t.Errorf("proxy CONNECT hosts = %v, want none for a NO_PROXY issuer\nchild output:\n%s", tunnels, output)
+			if testCase.wantTunnel {
+				require.Equal(t, []string{net.JoinHostPort(dexProxyHostname, port)}, tunnels)
+			} else {
+				require.Empty(t, tunnels)
 			}
 		})
 	}
 }
 
-// TestDexDiscoveryProxyChild runs only as the child process of
-// TestDexDiscoveryFollowsProxyEnvironment: net/http reads the proxy variables
-// once per process, so each proxy setting needs a fresh process.
-func TestDexDiscoveryProxyChild(t *testing.T) {
-	if os.Getenv(dexProxyChildEnv) != "1" {
-		t.Skip("child process of TestDexDiscoveryFollowsProxyEnvironment")
+func dexProxyCertificate(t *testing.T) (tls.Certificate, []byte) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		DNSNames:     []string{dexProxyHostname},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
-	auth, err := NewAuth(t.Context(), slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err == nil {
-		_ = auth.Shutdown(t.Context())
-	}
-	t.Logf("NewAuth: %v", err)
+	certificateDER, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
+	require.NoError(t, err)
+	return tls.Certificate{Certificate: [][]byte{certificateDER}, PrivateKey: privateKey},
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
 }
 
-func environmentWithoutProxy() []string {
+// Each child uses a fresh resolver and proxy environment, without replacing the HTTP transport.
+func installDexProxyResolver(t *testing.T) {
+	t.Helper()
+	net.DefaultResolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(context.Context, string, string) (net.Conn, error) {
+			client, server := net.Pipe()
+			go func() {
+				defer func() { _ = server.Close() }()
+				var length [2]byte
+				if _, err := io.ReadFull(server, length[:]); err != nil {
+					return
+				}
+				queryBytes := make([]byte, binary.BigEndian.Uint16(length[:]))
+				if _, err := io.ReadFull(server, queryBytes); err != nil {
+					return
+				}
+				var query dnsmessage.Message
+				if err := query.Unpack(queryBytes); err != nil {
+					return
+				}
+				response := dnsmessage.Message{
+					Header:    dnsmessage.Header{ID: query.ID, Response: true, Authoritative: true, RecursionAvailable: true},
+					Questions: query.Questions,
+				}
+				for _, question := range query.Questions {
+					if question.Name.String() == dexProxyHostname+"." && question.Type == dnsmessage.TypeA {
+						response.Answers = append(response.Answers, dnsmessage.Resource{
+							Header: dnsmessage.ResourceHeader{Name: question.Name, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET},
+							Body:   &dnsmessage.AResource{A: [4]byte{127, 0, 0, 1}},
+						})
+					}
+				}
+				responseBytes, err := response.Pack()
+				if err != nil || len(responseBytes) > 65535 {
+					return
+				}
+				binary.BigEndian.PutUint16(length[:], uint16(len(responseBytes))) //nolint:gosec // DNS responses are bounded to 65535 bytes.
+				_, _ = server.Write(append(length[:], responseBytes...))
+			}()
+			return client, nil
+		},
+	}
+}
+
+func dexProxyEnvironment() []string {
 	var environment []string
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
-		if strings.HasSuffix(strings.ToUpper(name), "_PROXY") {
+		if strings.HasSuffix(strings.ToUpper(name), "_PROXY") ||
+			strings.HasPrefix(name, "OAUTH_") || strings.HasPrefix(name, "MCP_OAUTH_") ||
+			strings.HasPrefix(name, "SSL_CERT_") {
 			continue
 		}
 		environment = append(environment, entry)
@@ -87,8 +175,6 @@ func environmentWithoutProxy() []string {
 	return environment
 }
 
-// tunnelProxy is an HTTPS proxy that records each CONNECT target and tunnels
-// every one of them to a fixed backend address.
 type tunnelProxy struct {
 	server  *httptest.Server
 	mutex   sync.Mutex
@@ -98,24 +184,23 @@ type tunnelProxy struct {
 func newTunnelProxy(t *testing.T, backendAddress string) *tunnelProxy {
 	t.Helper()
 	proxy := &tunnelProxy{}
-	proxy.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodConnect {
-			http.Error(w, "CONNECT only", http.StatusMethodNotAllowed)
+	proxy.server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodConnect {
+			http.Error(writer, "CONNECT only", http.StatusMethodNotAllowed)
 			return
 		}
 		proxy.mutex.Lock()
-		proxy.targets = append(proxy.targets, r.Host)
+		proxy.targets = append(proxy.targets, request.Host)
 		proxy.mutex.Unlock()
-
-		backendConnection, err := net.Dial("tcp", backendAddress)
+		backendConnection, err := net.DialTimeout("tcp", backendAddress, time.Second)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			http.Error(writer, err.Error(), http.StatusBadGateway)
 			return
 		}
-		hijacker, ok := w.(http.Hijacker)
+		hijacker, ok := writer.(http.Hijacker)
 		if !ok {
 			_ = backendConnection.Close()
-			http.Error(w, "hijacking unsupported", http.StatusInternalServerError)
+			http.Error(writer, "hijacking unsupported", http.StatusInternalServerError)
 			return
 		}
 		clientConnection, _, err := hijacker.Hijack()
@@ -139,4 +224,19 @@ func (proxy *tunnelProxy) connectedHosts() []string {
 	proxy.mutex.Lock()
 	defer proxy.mutex.Unlock()
 	return append([]string(nil), proxy.targets...)
+}
+
+func TestDexDiscoveryProxyChild(t *testing.T) {
+	if os.Getenv(dexProxyChildEnv) != "1" {
+		t.Skip("requires the parent proxy fixture")
+	}
+	installDexProxyResolver(t)
+	t.Setenv("OAUTH_PROVIDER", "dex")
+	t.Setenv("OAUTH_ISSUER", "https://mcp-timescale.example.com")
+	t.Setenv("OAUTH_DEX_ISSUER_URL", os.Getenv("DEX_PROXY_TEST_ISSUER"))
+	t.Setenv("OAUTH_DEX_CLIENT_ID", "mcp-timescale")
+	t.Setenv("OAUTH_DEX_CLIENT_SECRET", "secret")
+	auth, err := NewAuth(t.Context(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+	require.NoError(t, auth.Shutdown(t.Context()))
 }

@@ -98,22 +98,22 @@ tests:
                 key: client-secret
 
   - template: templates/configmap.yaml
-    it: keeps mcp-oauth's SSRF guard by default (no OAUTH_ALLOW_PRIVATE_URLS)
+    it: keeps mcp-oauth's SSRF guard by default (no OAUTH_ALLOW_PRIVATE_IP_JWKS)
     values:
       - ../ci/ci-values.yaml
     asserts:
       - notExists:
-          path: data.OAUTH_ALLOW_PRIVATE_URLS
+          path: data.OAUTH_ALLOW_PRIVATE_IP_JWKS
 
   - template: templates/configmap.yaml
-    it: renders OAUTH_ALLOW_PRIVATE_URLS when the Dex issuer resolves to a private address
+    it: renders OAUTH_ALLOW_PRIVATE_IP_JWKS when the Dex issuer resolves to a private address
     values:
       - ../ci/ci-values.yaml
     set:
-      oauth.allowPrivateURLs: true
+      oauth.allowPrivateIPJWKS: true
     asserts:
       - equal:
-          path: data.OAUTH_ALLOW_PRIVATE_URLS
+          path: data.OAUTH_ALLOW_PRIVATE_IP_JWKS
           value: "true"
       - equal:
           path: data.OAUTH_DEX_ISSUER_URL
@@ -169,3 +169,24 @@ tests:
       - notMatchRegex:
           path: data["databases.yaml"]
           pattern: plant-case-writer
+
+  - template: templates/configmap.yaml
+    it: ignores the deprecated loopback redirect value
+    values:
+      - ../ci/ci-values.yaml
+    set:
+      oauth.allowLocalhostRedirectURIs: true
+    asserts:
+      - notExists:
+          path: data.OAUTH_ALLOW_LOCALHOST_REDIRECT_URIS
+      - notExists:
+          path: data.OAUTH_ALLOW_PRIVATE_URLS
+
+  - template: templates/configmap.yaml
+    it: refuses the obsolete value even when the replacement is false
+    set:
+      oauth.allowPrivateURLs: true
+      oauth.allowPrivateIPJWKS: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "allowPrivateURLs.*value must be false"
