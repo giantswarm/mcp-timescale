@@ -1,13 +1,15 @@
 package server
 
 import (
+	"bytes"
+	"fmt"
+	"log/slog"
+	"strconv"
+	"strings"
 	"testing"
 
-	oauth "github.com/giantswarm/mcp-oauth"
 	"github.com/stretchr/testify/require"
 )
-
-const testOwnIssuer = "https://mcp.example/"
 
 func TestPrivateIPJWKSFromEnv(t *testing.T) {
 	const canonicalName = "OAUTH_ALLOW_PRIVATE_IP_JWKS"
@@ -51,25 +53,25 @@ func TestPrivateIPJWKSFromEnv(t *testing.T) {
 	}
 }
 
-func TestAllowPrivateIPJWKS_ServerConfig(t *testing.T) {
-	for _, testCase := range []struct {
-		name   string
-		preset bool
-		allow  bool
-		want   bool
-	}{
-		{name: "off keeps the JWKS guard"},
-		{name: "on lifts the JWKS guard", allow: true, want: true},
-		{name: "off preserves an explicit upstream policy", preset: true, want: true},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			configuration := &oauth.ServerConfig{Issuer: testOwnIssuer, TrustedAudiences: []string{"aud"}, AllowPrivateIPJWKS: testCase.preset}
-			allowPrivateIPJWKS(configuration, testCase.allow)
-			require.Equal(t, testCase.want, configuration.AllowPrivateIPJWKS)
-			require.Equal(t, testOwnIssuer, configuration.Issuer)
-			require.Equal(t, []string{"aud"}, configuration.TrustedAudiences)
-			require.False(t, configuration.AllowPrivateIPClientMetadata)
-			require.Nil(t, configuration.JWKSRootCAs)
+func TestNewAuth_PrivateIPJWKSIsInert(t *testing.T) {
+	t.Setenv("OAUTH_PROVIDER", "google")
+	t.Setenv("OAUTH_ISSUER", "https://mcp-timescale.example.com")
+	t.Setenv("OAUTH_GOOGLE_CLIENT_ID", "mcp-timescale")
+	t.Setenv("OAUTH_GOOGLE_CLIENT_SECRET", "secret")
+	t.Setenv("OAUTH_GOOGLE_REDIRECT_URL", "https://mcp-timescale.example.com/oauth/callback")
+
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			t.Setenv(EnvAllowPrivateIPJWKS, strconv.FormatBool(enabled))
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+			auth, err := NewAuth(t.Context(), logger)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = auth.Shutdown(t.Context()) })
+
+			require.False(t, auth.Server.Config.AllowPrivateIPJWKS) //nolint:staticcheck // SA1019: asserting the deprecated field stays unset
+			require.Equal(t, enabled, strings.Contains(buf.String(), EnvAllowPrivateIPJWKS+" (Helm oauth.allowPrivateIPJWKS) has no effect"))
 		})
 	}
 }

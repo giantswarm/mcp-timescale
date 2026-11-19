@@ -45,8 +45,8 @@ Kubernetes: `>=1.27.0-0`
 | oauth.scopes[2] | string | `"groups"` |  |
 | oauth.allowInsecureHTTP | bool | `false` |  |
 | oauth.allowLocalhostRedirectURIs | bool | `false` | Deprecated and ignored. Native-app loopback redirect URIs are always accepted on any port (RFC 8252 section 7.3). Non-loopback redirect URIs require HTTPS unless an explicit redirect policy permits HTTP. Scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first. |
-| oauth.allowPrivateIPJWKS | bool | `false` | Permit the configured JWKS endpoint to resolve to private addresses. HTTPS and TLS verification remain required. Dex discovery and token calls already follow HTTP_PROXY, HTTPS_PROXY and NO_PROXY without this setting. |
-| oauth.allowPrivateURLs | bool | `false` | Obsolete; true is rejected. Use allowPrivateIPJWKS for JWKS fetching. The false compatibility value is scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first. |
+| oauth.allowPrivateIPJWKS | bool | `false` | Deprecated, no effect: the configured issuer host may resolve to a private address without it. |
+| oauth.allowPrivateURLs | bool | `false` | Obsolete; true is rejected. The false compatibility value is scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first. |
 | oauth.dex.issuerURL | string | `""` |  |
 | oauth.dex.clientIDSecretRef.name | string | `""` |  |
 | oauth.dex.clientIDSecretRef.key | string | `"client-id"` |  |

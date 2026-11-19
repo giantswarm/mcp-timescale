@@ -148,9 +148,9 @@ func privateJWKS(t *testing.T) (token, jwksURL string, pool *x509.CertPool) {
 // newPrivateJWKSServer stands up the real HTTP stack — mcp-oauth's
 // ValidateToken gate, BuildMCPMux, the streamable-HTTP transport and a tool
 // reporting the caller — with a server configuration shaped like
-// oauthconfig.FromEnv's for a forwarded-token deployment, then applies the
-// flag the way NewAuth does. JWKSRootCAs trusts only the test certificate, so
-// the flag is the single difference between the two cases.
+// oauthconfig.FromEnv's for a forwarded-token deployment. JWKSRootCAs trusts
+// only the test certificate, so the address policy is the single difference
+// between the two cases.
 func newPrivateJWKSServer(t *testing.T, allow bool) (*client.Client, *bytes.Buffer) {
 	t.Helper()
 
@@ -171,11 +171,11 @@ func newPrivateJWKSServer(t *testing.T, allow bool) (*client.Client, *bytes.Buff
 	t.Cleanup(store.Stop)
 
 	cfg := &oauth.ServerConfig{
-		Issuer:           "https://mcp.test.example",
-		TrustedAudiences: []string{privateAudience},
-		JWKSRootCAs:      pool,
+		Issuer:             "https://mcp.test.example",
+		TrustedAudiences:   []string{privateAudience},
+		AllowPrivateIPJWKS: allow, //nolint:staticcheck // SA1019: httptest serves the JWKS on loopback
+		JWKSRootCAs:        pool,
 	}
-	allowPrivateIPJWKS(cfg, allow)
 	srv, err := oauth.NewServerWithCombined(provider, store, cfg, logger)
 	if err != nil {
 		t.Fatalf("oauth.NewServerWithCombined: %v", err)
@@ -250,7 +250,7 @@ func TestForwardedToken_PrivateJWKS(t *testing.T) {
 		}
 	})
 
-	t.Run("OAUTH_ALLOW_PRIVATE_IP_JWKS accepts the same token", func(t *testing.T) {
+	t.Run("a permitted JWKS address accepts the same token", func(t *testing.T) {
 		cli, buf := newPrivateJWKSServer(t, true)
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()

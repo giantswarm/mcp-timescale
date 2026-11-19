@@ -226,10 +226,11 @@
                 },
                 "allowPrivateIPJWKS": {
                     "type": "boolean",
-                    "description": "Permit the configured JWKS endpoint to resolve to private addresses. HTTPS and TLS verification remain required. Dex discovery and token calls already follow HTTP_PROXY, HTTPS_PROXY and NO_PROXY without this setting."
+                    "description": "Deprecated, no effect: the configured issuer host may resolve to a private address without it.",
+                    "deprecated": true
                 },
                 "allowPrivateURLs": {
-                    "description": "Obsolete; true is rejected. Use allowPrivateIPJWKS for JWKS fetching. The false compatibility value is scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first.",
+                    "description": "Obsolete; true is rejected. The false compatibility value is scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first.",
                     "deprecated": true,
                     "const": false
                 },

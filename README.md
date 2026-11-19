@@ -241,7 +241,7 @@ Every knob is an env var; flags override. The OAuth knobs come straight from
 | `OAUTH_DEX_ISSUER_URL` | — | Upstream Dex issuer (provider=dex) |
 | `OAUTH_DEX_CLIENT_ID` / `OAUTH_DEX_CLIENT_SECRET[_FILE]` | — | Dex client |
 | `OAUTH_TRUSTED_AUDIENCES` | — | Audiences of forwarded ID tokens (muster's Dex client ID) |
-| `OAUTH_ALLOW_PRIVATE_IP_JWKS` | false | Let the JWKS fetch that validates forwarded ID tokens resolve to private/loopback addresses (Dex behind an internal-only load balancer); TLS stays verified. Dex discovery and the token endpoint need no setting and follow `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` |
+| `OAUTH_ALLOW_PRIVATE_IP_JWKS` | false | Deprecated, no effect: the configured issuer host may resolve to a private address without it; `true` logs a warning. Dex discovery and the token endpoint follow `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` |
 | `OAUTH_STORAGE_BACKEND` | memory | memory \| valkey (valkey for >1 replica with interactive logins) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Tracing; empty disables |
 
@@ -362,15 +362,11 @@ Tools then appear in muster with the `x_timescale_` prefix
 (`x_timescale_timescale_query`, …) and every call reaches the database as the
 person who is logged in to muster.
 
-When the installation's Dex resolves to a private address (an internal-only
-load balancer in front of it), set `oauth.allowPrivateIPJWKS: true`. Otherwise
-mcp-oauth's SSRF guard refuses the JWKS fetch (`Token validation failed …
-resolved to restricted IP`) and every forwarded token is rejected. The flag
-lifts the guard for that JWKS fetch only; TLS verification stays on. Dex
-discovery and the token endpoint need no setting: they reach a private Dex and
-follow `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, so on a proxied
-installation list the Dex host in `NO_PROXY` when it must be reached
-directly.
+A Dex issuer host that resolves to a private address (an internal-only load balancer in
+front of it) needs no setting: the JWKS fetch for forwarded tokens, Dex discovery and the
+token endpoint reach it, and follow `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, so on a
+proxied installation list the Dex host in `NO_PROXY` when it must be reached directly.
+`oauth.allowPrivateIPJWKS` is deprecated and has no effect.
 
 See [migration instructions](docs/private-jwks-migration.md) for obsolete private-URL settings.
 

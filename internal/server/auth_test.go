@@ -107,7 +107,7 @@ func newForwardedTokenServer(t *testing.T) (*client.Client, *bytes.Buffer) {
 	oauthSrv, err := oauth.NewServerWithCombined(provider, store, &oauth.ServerConfig{
 		Issuer:             forwardedIssuer,
 		TrustedAudiences:   []string{forwardedAudience},
-		AllowPrivateIPJWKS: true,
+		AllowPrivateIPJWKS: true, //nolint:staticcheck // SA1019: httptest serves the JWKS on loopback
 		JWKSRootCAs:        rootCAs,
 	}, logger)
 	if err != nil {
@@ -136,7 +136,7 @@ func newForwardedTokenServer(t *testing.T) (*client.Client, *bytes.Buffer) {
 	}
 	t.Cleanup(func() { _ = cli.Close() })
 
-	// Construction-time configuration warnings (AllowPrivateIPJWKS, memory
+	// Construction-time configuration warnings (memory
 	// backend) are not per-call noise; only what the requests log matters.
 	buf.Reset()
 	return cli, &buf
