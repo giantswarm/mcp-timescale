@@ -1,5 +1,5 @@
 {{- if .Values.oauth.allowPrivateURLs -}}
-{{- fail "oauth.allowPrivateURLs=true is obsolete; remove it; use oauth.allowPrivateIPJWKS=true for private-address JWKS fetching; Dex discovery needs no setting" -}}
+{{- fail "oauth.allowPrivateURLs=true is obsolete; remove it; Dex discovery and the issuer host's JWKS need no setting" -}}
 {{- end -}}
 apiVersion: v1
 kind: ConfigMap

@@ -106,7 +106,7 @@ tests:
           path: data.OAUTH_ALLOW_PRIVATE_IP_JWKS
 
   - template: templates/configmap.yaml
-    it: renders OAUTH_ALLOW_PRIVATE_IP_JWKS when the Dex issuer resolves to a private address
+    it: still renders the deprecated OAUTH_ALLOW_PRIVATE_IP_JWKS
     values:
       - ../ci/ci-values.yaml
     set:

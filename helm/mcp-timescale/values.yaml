@@ -104,12 +104,10 @@ oauth:
   # require HTTPS unless an explicit redirect policy permits HTTP.
   # Scheduled for removal in v0.9.0 or on 2027-02-17, whichever comes first.
   allowLocalhostRedirectURIs: false  # @schema deprecated: true
-  # -- Permit the configured JWKS endpoint to resolve to private addresses.
-  # HTTPS and TLS verification remain required. Dex discovery and token calls
-  # already follow HTTP_PROXY, HTTPS_PROXY and NO_PROXY without this setting.
-  allowPrivateIPJWKS: false
-  # -- Obsolete; true is rejected. Use allowPrivateIPJWKS for JWKS fetching.
-  # The false compatibility value is scheduled for removal in v0.9.0
+  # -- Deprecated, no effect: the configured issuer host may resolve to a
+  # private address without it.
+  allowPrivateIPJWKS: false  # @schema deprecated: true
+  # -- Obsolete; true is rejected. The false compatibility value is scheduled for removal in v0.9.0
   # or on 2027-02-17, whichever comes first.
   allowPrivateURLs: false  # @schema deprecated: true; const: false
   # Dex provider config. The redirect URL is auto-derived from issuerURL

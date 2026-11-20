@@ -1,9 +1,10 @@
 # Private-address JWKS settings migration
 
-Use `OAUTH_ALLOW_PRIVATE_IP_JWKS=true` or Helm `oauth.allowPrivateIPJWKS: true`
-only when the configured JWKS endpoint must resolve to private addresses.
-HTTPS and certificate verification remain required. Dex discovery and token requests
-already support private addresses and honor `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`.
+`OAUTH_ALLOW_PRIVATE_IP_JWKS` and Helm `oauth.allowPrivateIPJWKS` have no effect: the
+configured issuer host may resolve to a private address without them. HTTPS and
+certificate verification remain required. Setting the key to `true` logs a warning at
+startup; remove it. Dex discovery and token requests honor `HTTP_PROXY`, `HTTPS_PROXY`
+and `NO_PROXY`.
 
 Remove `OAUTH_ALLOW_PRIVATE_URLS`, its `MCP_OAUTH_ALLOW_PRIVATE_URLS` alias, and Helm
 `oauth.allowPrivateURLs`. An enabled obsolete setting fails startup or chart rendering
