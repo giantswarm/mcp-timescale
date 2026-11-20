@@ -60,7 +60,7 @@ func NewAuth(_ context.Context, logger *slog.Logger) (*Auth, error) {
 		logger.Warn("OAUTH_STORAGE_BACKEND=memory in a Kubernetes deployment — OAuth state is lost on pod restart and NOT shared across replicas; set OAUTH_STORAGE_BACKEND=valkey for production")
 	}
 
-	cfg, err := oauthconfig.FromEnv()
+	cfg, err := oauthConfigFromEnv()
 	if err != nil {
 		_ = storeClose()
 		return nil, fmt.Errorf("oauth config from env: %w", err)
@@ -143,4 +143,15 @@ func ContextWithCaller(ctx context.Context, c Caller) context.Context {
 		ui = &providers.UserInfo{ID: c.Subject, Email: c.Email, Groups: c.Groups}
 	}
 	return context.WithValue(ctx, callerKey{}, ui)
+}
+
+func oauthConfigFromEnv() (*oauth.ServerConfig, error) {
+	configuration, err := oauthconfig.FromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if os.Getenv("OAUTH_ENABLE_CLIENT_ID_METADATA_DOCUMENTS") == "" {
+		configuration.EnableClientIDMetadataDocuments = true
+	}
+	return configuration, nil
 }

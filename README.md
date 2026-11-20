@@ -2,6 +2,11 @@
 
 # mcp-timescale
 
+OAuth client registration: CIMD is enabled by default. DCR is deprecated by MCP
+2026-07-28 and remains a compatibility fallback. See
+[registration, consent, egress and TLS configuration](docs/oauth-client-registration.md).
+
+
 Read-only [MCP](https://modelcontextprotocol.io) server for TimescaleDB and
 PostgreSQL databases that **acts on the caller's identity**. An agent gets the
 catalog (schemas, tables, hypertables, chunks, continuous aggregates,
