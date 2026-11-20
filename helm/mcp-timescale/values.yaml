@@ -176,10 +176,10 @@ serviceMonitor:
   scrapeTimeout: 10s
   labels: {}  # @schema additionalProperties: true
 
-# -- NetworkPolicy with default-deny egress (DNS + egressAllowlist only).
+# -- NetworkPolicy permitting DNS and public HTTPS with OAuth enabled.
 # Off by default because the databases and Dex are reached by DNS name and a
 # NetworkPolicy cannot express that; when enabling it, allow TCP 5432 to the
-# database namespaces and TCP 443 for Dex JWKS. Example:
+# database namespaces and the private Dex endpoint. Example:
 #   egressAllowlist:
 #     - to:
 #         - namespaceSelector:
@@ -194,6 +194,8 @@ serviceMonitor:
 #           port: 443
 networkPolicy:
   enabled: false
+  # -- Allow public TCP/443 for OAuth discovery and CIMD metadata when OAuth is enabled.
+  allowPublicHTTPS: true
   egressAllowlist: []
 
 # -- PodDisruptionBudget. Off by default because replicas is 1 (minAvailable

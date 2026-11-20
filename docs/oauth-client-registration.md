@@ -27,10 +27,12 @@ provider's CA or JWKS private-host allowance does not grant access to private
 CIMD hosts. Prefer pre-registered metadata for internal clients; any private
 redirect exception must name the exact host and retain TLS verification.
 
-The default NetworkPolicy permits DNS only. CIMD requires an installation
-egress allowance for public HTTPS metadata hosts or a configured egress proxy,
-plus separate rules for private identity-provider and backend endpoints.
-Configure these through the existing networkPolicy.egressAllowlist values.
+NetworkPolicy is disabled by default. When enabled with OAuth, it permits DNS
+and public TCP/443 for CIMD metadata and identity-provider requests. Private,
+loopback and link-local destinations are excluded from the public HTTPS rule.
+Set `networkPolicy.allowPublicHTTPS=false` to use a controlled egress proxy
+or narrower rules through `networkPolicy.egressAllowlist`. Private
+identity-provider and database endpoints need their own explicit egress rules.
 The container includes system CA roots. For an HTTPS inspection proxy, extend
 system trust with the proxy CA rather than disabling certificate verification.
 Verify a real public metadata fetch from the deployed pod after changing egress,

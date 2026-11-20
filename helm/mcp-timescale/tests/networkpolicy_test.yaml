@@ -1,0 +1,56 @@
+suite: OAuth metadata egress
+templates:
+  - templates/networkpolicy.yaml
+tests:
+  - it: permits public HTTPS metadata with OAuth and network isolation enabled
+    set:
+      networkPolicy.enabled: true
+      oauth.enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[1].ports
+          value:
+            - protocol: TCP
+              port: 443
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 10.0.0.0/8
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 127.0.0.0/8
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 169.254.0.0/16
+      - equal:
+          path: spec.egress[1].to[1].ipBlock.cidr
+          value: 2000::/3
+  - it: keeps DNS and explicit backend rules when public HTTPS is disabled
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.allowPublicHTTPS: false
+      oauth.enabled: true
+      networkPolicy.egressAllowlist:
+        - ports:
+            - protocol: TCP
+              port: 5432
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+      - equal:
+          path: spec.egress[1].ports[0].port
+          value: 5432
+  - it: permits DNS only without OAuth or extra egress rules
+    set:
+      networkPolicy.enabled: true
+      oauth.enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 1
+  - it: omits the policy when network isolation is disabled
+    set:
+      networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
