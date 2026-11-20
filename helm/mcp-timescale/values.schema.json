@@ -197,9 +197,13 @@
         },
         "networkPolicy": {
             "type": "object",
-            "description": "NetworkPolicy with default-deny egress (DNS + egressAllowlist only). Off by default because the databases and Dex are reached by DNS name and a NetworkPolicy cannot express that; when enabling it, allow TCP 5432 to the database namespaces and TCP 443 for Dex JWKS. Example: egressAllowlist: - to: - namespaceSelector: matchLabels: {kubernetes.io/metadata.name: timescale-demo} ports: - protocol: TCP port: 5432 - to: - ipBlock: {cidr: 0.0.0.0/0} ports: - protocol: TCP port: 443",
+            "description": "NetworkPolicy permitting DNS and public HTTPS with OAuth enabled. Off by default because the databases and Dex are reached by DNS name and a NetworkPolicy cannot express that; when enabling it, allow TCP 5432 to the database namespaces and the private Dex endpoint. Example: egressAllowlist: - to: - namespaceSelector: matchLabels: {kubernetes.io/metadata.name: timescale-demo} ports: - protocol: TCP port: 5432 - to: - ipBlock: {cidr: 0.0.0.0/0} ports: - protocol: TCP port: 443",
             "additionalProperties": false,
             "properties": {
+                "allowPublicHTTPS": {
+                    "type": "boolean",
+                    "description": "Allow public TCP/443 for OAuth discovery and CIMD metadata when OAuth is enabled."
+                },
                 "egressAllowlist": {
                     "type": "array"
                 },

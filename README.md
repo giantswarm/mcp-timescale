@@ -2,6 +2,11 @@
 
 # mcp-timescale
 
+OAuth client registration: CIMD is enabled by default. DCR is deprecated by MCP
+2026-07-28 and remains a compatibility fallback. See
+[registration, consent, egress and TLS configuration](docs/oauth-client-registration.md).
+
+
 Read-only [MCP](https://modelcontextprotocol.io) server for TimescaleDB and
 PostgreSQL databases that **acts on the caller's identity**. An agent gets the
 catalog (schemas, tables, hypertables, chunks, continuous aggregates,
@@ -333,9 +338,10 @@ The `HTTPRoute` forwards `/`, so `/mcp`, `/oauth/*` and `/.well-known/*` share
 the Service. `storage.kind` defaults to `memory` and `replicas` to `1`: with
 forwarded tokens no OAuth state needs sharing. Interactive logins across more
 than one replica need `storage.kind: valkey`. `networkPolicy.enabled` is off by
-default because the databases and Dex are reached by DNS name; the values file
-documents the egress rules to add when enabling it (TCP 5432 to the database
-namespaces, TCP 443 for Dex JWKS).
+default because the databases and Dex are reached by DNS name. When enabled
+with OAuth, the policy permits DNS and public HTTPS. Add explicit egress
+rules for database namespaces and private Dex endpoints. Set
+`networkPolicy.allowPublicHTTPS=false` for proxy-only or narrower HTTPS egress.
 
 ### Registering with muster
 

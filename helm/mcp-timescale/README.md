@@ -1,5 +1,8 @@
 # mcp-timescale
 
+CIMD is enabled by default. DCR is deprecated by MCP 2026-07-28 and remains a
+compatibility fallback; see the [OAuth registration guide](../../docs/oauth-client-registration.md).
+
 Read-only MCP server for TimescaleDB and PostgreSQL databases, acting on the caller identity
 
 **Homepage:** <https://github.com/giantswarm/mcp-timescale>
@@ -76,7 +79,8 @@ Kubernetes: `>=1.27.0-0`
 | serviceMonitor.interval | string | `"30s"` |  |
 | serviceMonitor.scrapeTimeout | string | `"10s"` |  |
 | serviceMonitor.labels | object | `{}` |  |
-| networkPolicy | object | `{"egressAllowlist":[],"enabled":false}` | NetworkPolicy with default-deny egress (DNS + egressAllowlist only). Off by default because the databases and Dex are reached by DNS name and a NetworkPolicy cannot express that; when enabling it, allow TCP 5432 to the database namespaces and TCP 443 for Dex JWKS. Example:   egressAllowlist:     - to:         - namespaceSelector:             matchLabels: {kubernetes.io/metadata.name: timescale-demo}       ports:         - protocol: TCP           port: 5432     - to:         - ipBlock: {cidr: 0.0.0.0/0}       ports:         - protocol: TCP           port: 443 |
+| networkPolicy | object | `{"allowPublicHTTPS":true,"egressAllowlist":[],"enabled":false}` | NetworkPolicy permitting DNS and public HTTPS with OAuth enabled. Off by default because the databases and Dex are reached by DNS name and a NetworkPolicy cannot express that; when enabling it, allow TCP 5432 to the database namespaces and the private Dex endpoint. Example:   egressAllowlist:     - to:         - namespaceSelector:             matchLabels: {kubernetes.io/metadata.name: timescale-demo}       ports:         - protocol: TCP           port: 5432     - to:         - ipBlock: {cidr: 0.0.0.0/0}       ports:         - protocol: TCP           port: 443 |
+| networkPolicy.allowPublicHTTPS | bool | `true` | Allow public TCP/443 for OAuth discovery and CIMD metadata when OAuth is enabled. |
 | podDisruptionBudget | object | `{"enabled":false,"minAvailable":1}` | PodDisruptionBudget. Off by default because replicas is 1 (minAvailable 1 would block node drains); enable together with replicas >= 2. |
 | autoscaling.enabled | bool | `false` |  |
 | autoscaling.minReplicas | int | `2` |  |
